@@ -1,6 +1,6 @@
 # Reapo
 
-Reapo is an I/O server for providing a codebase's context for a codebase.
+Reapo is an I/O server that retrieves context for a local codebase (including documentation).
 
 ## Features
 
