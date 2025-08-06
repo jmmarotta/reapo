@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/anthropics/anthropic-sdk-go"
+	"reapo/internal/config"
 	"reapo/internal/logger"
 )
 
@@ -143,14 +144,14 @@ func (a *Agent) RunInference(ctx context.Context, conversation []anthropic.Messa
 	}
 
 	logger.Chat("REQUEST", map[string]interface{}{
-		"model":     "claude-4-sonnet-20250514",
+		"model":     config.GetModelName(),
 		"messages":  messages,
 		"toolCount": len(anthropicTools),
 	})
 
 	message, err := a.client.Messages.New(ctx, anthropic.MessageNewParams{
-		Model:     anthropic.ModelClaude4Sonnet20250514,
-		MaxTokens: int64(1024),
+		Model:     config.GetModel(),
+		MaxTokens: int64(config.GetMaxTokens()),
 		Messages:  conversation,
 		Tools:     anthropicTools,
 		System:    []anthropic.TextBlockParam{{Type: "text", Text: a.systemPrompt}},

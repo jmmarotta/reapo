@@ -13,6 +13,7 @@ import (
 	"github.com/anthropics/anthropic-sdk-go"
 	"reapo/internal/agent"
 	"reapo/internal/auth"
+	"reapo/internal/config"
 	"reapo/internal/logger"
 	"reapo/internal/tools"
 	"reapo/internal/tui"
@@ -22,12 +23,15 @@ import (
 var systemPromptContent string
 
 func main() {
+	// Initialize configuration
+	config.Init()
+
 	// Initialize logger
 	if err := logger.Init(); err != nil {
 		log.Fatalf("Failed to initialize logger: %v", err)
 	}
 	defer logger.Close()
-	logger.Debug("Starting reapo...")
+	logger.Debug("Starting reapo with model: %s", config.GetModelName())
 
 	// Create authenticated client
 	client, err := auth.NewClient()

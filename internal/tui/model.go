@@ -9,6 +9,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/google/uuid"
 	"reapo/internal/agent"
+	"reapo/internal/config"
 	"reapo/internal/tools"
 	"reapo/internal/tui/completion"
 	"reapo/internal/tui/components"
@@ -170,8 +171,8 @@ func NewModel(client anthropic.Client, toolDefs []tools.ToolDefinition) Model {
 		client:           client,
 		toolDefs:         toolDefs,
 		contextTokens:    initialTokens,
-		maxContextTokens: 200000, // 200k tokens for both Sonnet 4 and Opus 4
-		currentModel:     "claude-sonnet-4",
+		maxContextTokens: config.GetContextTokens(),
+		currentModel:     config.GetModelName(),
 		spinners:         make(map[string]*components.SpinnerComponent),
 		helpModal:        components.NewHelpModal(),
 		statusModal:      components.NewStatusModal(),

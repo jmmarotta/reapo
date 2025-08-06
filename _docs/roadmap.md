@@ -1,7 +1,3 @@
-- Auto compaction
-
-- add config to choose model
-
 - Add tools for parity with opencode
 - mark todo as in progress
 

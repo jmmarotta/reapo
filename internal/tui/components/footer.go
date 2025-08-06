@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+	"reapo/internal/config"
 	"reapo/internal/tui/components/vimtextarea"
 )
 
@@ -24,8 +25,8 @@ func NewFooterComponent(mode vimtextarea.Mode, width int) *FooterComponent {
 		mode:             mode,
 		width:            width,
 		contextTokens:    0,
-		maxContextTokens: 200000,
-		modelName:        "claude-sonnet-4",
+		maxContextTokens: config.GetContextTokens(),
+		modelName:        config.GetModelName(),
 	}
 }
 
