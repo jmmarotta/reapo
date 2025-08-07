@@ -20,7 +20,7 @@ import (
 )
 
 //go:embed system_prompt.txt
-var systemPromptContent string
+var systemPrompt string
 
 func main() {
 	// Initialize configuration
@@ -41,6 +41,18 @@ func main() {
 		// Create a default client that might work with env vars
 		client = anthropic.NewClient()
 	}
+
+	// Get current working directory and append to system prompt
+	workingDir, err := os.Getwd()
+	if err != nil {
+		workingDir = "unknown"
+	}
+
+	// Append working directory info to system prompt
+	systemPromptWithContext := systemPrompt + "\n\n# Environment Context\nCurrent working directory: " + workingDir
+
+	// Set the system prompt for the TUI package
+	var systemPromptContent = systemPromptWithContext
 
 	// Initialize task agent with client and system prompt
 	tools.InitializeTaskAgent(&client, systemPromptContent)

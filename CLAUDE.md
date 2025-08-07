@@ -74,7 +74,7 @@ reapo/
 
 **Available Tools**:
 - `read_file` - Read file contents with optional line ranges
-- `list_files` - Directory listings with recursive traversal
+- `ls` - Directory listings with ignore pattern support
 - `edit_file` - String replacement-based file editing
 - `todoread`/`todowrite` - In-memory todo list management
 - `run_task` - Spawn sub-agents for complex tasks with dedicated context

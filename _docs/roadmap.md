@@ -1,5 +1,3 @@
-- prompts in separate txt file
-
 - tools have output
 
 - tools ask for permission (for certain tools)

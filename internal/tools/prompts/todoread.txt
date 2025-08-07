@@ -1,0 +1,1 @@
+List all todos with their current status (completed or pending).

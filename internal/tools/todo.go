@@ -1,6 +1,7 @@
 package tools
 
 import (
+	_ "embed"
 	"encoding/json"
 	"fmt"
 	"sync"
@@ -32,10 +33,13 @@ func generateTodoID() string {
 	return fmt.Sprintf("todo_%d", todoCounter)
 }
 
+//go:embed prompts/todoread.txt
+var todoReadPrompt string
+
 // TodoRead tool definition
 var TodoReadDefinition = ToolDefinition{
 	Name:        "todoread",
-	Description: "List all todos with their current status (completed or pending).",
+	Description: todoReadPrompt,
 	InputSchema: schema.GenerateSchema[TodoReadInput](),
 	Function:    TodoRead,
 }
@@ -64,10 +68,13 @@ func TodoRead(input json.RawMessage) (string, error) {
 	return result, nil
 }
 
+//go:embed prompts/todowrite.txt
+var todoWritePrompt string
+
 // TodoWrite tool definition
 var TodoWriteDefinition = ToolDefinition{
 	Name:        "todowrite",
-	Description: "Create new todos or mark existing todos as completed. Use 'add' to create a new todo or 'complete' to mark a todo as done.",
+	Description: todoWritePrompt,
 	InputSchema: schema.GenerateSchema[TodoWriteInput](),
 	Function:    TodoWrite,
 }

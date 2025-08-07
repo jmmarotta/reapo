@@ -1,6 +1,7 @@
 package tools
 
 import (
+	_ "embed"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -11,10 +12,13 @@ import (
 	"reapo/internal/schema"
 )
 
+//go:embed prompts/ls.txt
+var lsPrompt string
+
 // LSDefinition tool definition
 var LSDefinition = ToolDefinition{
 	Name:        "ls",
-	Description: `Lists files and directories in a given path. The path parameter must be an absolute path, not a relative path. You can optionally provide an array of glob patterns to ignore with the ignore parameter. You should generally prefer the Glob and Grep tools, if you know which directories to search.`,
+	Description: lsPrompt,
 	InputSchema: schema.GenerateSchema[LSInput](),
 	Function:    LS,
 }
