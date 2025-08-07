@@ -86,14 +86,14 @@ func main() {
 
 	if len(args) > 0 && args[0] == "run" {
 		// Non-interactive mode: reapo run
-		runNonInteractive(client, toolDefs, args[1:])
+		runNonInteractive(client, toolDefs, args[1:], systemPromptContent)
 	} else {
 		// Interactive TUI mode: reapo
 		runTUI(client, toolDefs)
 	}
 }
 
-func runNonInteractive(client anthropic.Client, toolDefs []tools.ToolDefinition, args []string) {
+func runNonInteractive(client anthropic.Client, toolDefs []tools.ToolDefinition, args []string, systemPromptContent string) {
 	var input string
 
 	if len(args) > 0 {
@@ -140,5 +140,5 @@ func runNonInteractive(client anthropic.Client, toolDefs []tools.ToolDefinition,
 }
 
 func runTUI(client anthropic.Client, toolDefs []tools.ToolDefinition) {
-	tui.RunTUI(client, toolDefs, systemPromptContent)
+	tui.RunTUI(client, toolDefs, systemPrompt)
 }
