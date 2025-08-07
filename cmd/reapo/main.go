@@ -47,12 +47,27 @@ func main() {
 
 	// Register all available tools
 	toolDefs := []tools.ToolDefinition{
-		tools.ReadFileDefinition,
-		tools.ListFilesDefinition,
-		tools.EditFileDefinition,
+		// File operations
+		tools.ReadDefinition,
+		tools.WriteDefinition,
+		tools.EditDefinition,
+		tools.MultiEditDefinition,
+		// Directory operations
+		tools.LSDefinition,
+		tools.ListFilesDefinition, // Keep for backward compatibility
+		// Search operations
+		tools.GlobDefinition,
+		tools.GrepDefinition,
+		// Shell operations
+		tools.BashDefinition,
+		// Web operations
+		tools.WebFetchDefinition,
+		tools.WebSearchDefinition,
+		// Todo operations
 		tools.TodoReadDefinition,
 		tools.TodoWriteDefinition,
-		tools.RunTaskDefinition,
+		// Task operations
+		tools.TaskDefinition,
 	}
 
 	// Parse command line arguments

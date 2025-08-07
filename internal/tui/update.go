@@ -66,7 +66,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.statusModal = &statusModal
 			return m, cmd
 		}
-		
+
 		// Handle key events before passing to textarea
 		switch {
 		case msg.String() == "ctrl+c":
@@ -85,7 +85,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.textarea.Value() != "" && !m.processing {
 				userMessage := m.textarea.Value()
 				m.textarea.SetValue("")
-				
+
 				m.processing = true
 				return m, m.processMessage(userMessage)
 			}
@@ -95,7 +95,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.textarea.Value() != "" && !m.processing {
 				userMessage := m.textarea.Value()
 				m.textarea.SetValue("")
-				
+
 				m.processing = true
 				return m, m.processMessage(userMessage)
 			}
@@ -111,7 +111,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Update context tokens when adding completed messages
 		if msg.Message.Status == components.MessageCompleted {
 			m.contextTokens = m.countConversationTokens()
-			
+
 			// Check if we need auto-compaction
 			if cmd := m.checkAutoCompaction(); cmd != nil {
 				return m, cmd
@@ -156,7 +156,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.processingSpinner = nil
 			// Update context tokens when message is complete
 			m.contextTokens = m.countConversationTokens()
-			
+
 			// Check if we need auto-compaction
 			if cmd := m.checkAutoCompaction(); cmd != nil {
 				return m, cmd
@@ -220,10 +220,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			UpdatedAt: time.Now(),
 		}
 		m.messages = append(m.messages, userMsg)
-		
+
 		// Update context tokens after adding user message
 		m.contextTokens = m.countConversationTokens()
-		
+
 		// Check if we need auto-compaction before processing
 		if cmd := m.checkAutoCompaction(); cmd != nil {
 			return m, cmd
@@ -372,7 +372,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.processing = false
 			m.processingText = ""
 			m.processingSpinner = nil
-			
+
 			// Show error in statusline too
 			return m, func() tea.Msg {
 				return ShowStatuslineMsg{
@@ -435,7 +435,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		return m, nil
-		
+
 	case SetProcessingMsg:
 		// Update processing state
 		m.processing = msg.Active
@@ -454,11 +454,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.processingSpinner = nil
 		}
 		return m, nil
-		
+
 	case StoreVerifierAndShowModalMsg:
 		// Store the verifier first
 		m.authVerifier = msg.Verifier
-		
+
 		// Show statusline message about browser
 		if msg.BrowserOpened {
 			cmds = append(cmds, func() tea.Msg {
@@ -477,7 +477,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			})
 		}
-		
+
 		// Then show the auth modal
 		var message string
 		if msg.BrowserOpened {
@@ -485,13 +485,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			message = "Could not open browser. Please visit the URL below and copy the authorization code."
 		}
-		
+
 		cmd := m.authModal.Show(components.AuthModalConfig{
-			Title:    "Claude Max Authentication",
-			Message:  message,
-			URL:      msg.URL,
-			Width:    m.viewport.width,
-			Height:   m.viewport.height,
+			Title:   "Claude Max Authentication",
+			Message: message,
+			URL:     msg.URL,
+			Width:   m.viewport.width,
+			Height:  m.viewport.height,
 			OnSubmit: func(code string) tea.Cmd {
 				return m.handleAuthCode(code, m.authVerifier)
 			},
@@ -507,7 +507,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		})
 		cmds = append(cmds, cmd)
 		return m, tea.Batch(cmds...)
-		
+
 	case ShowAuthModalMsg:
 		// Show the auth modal
 		var message string
@@ -516,13 +516,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			message = "Could not open browser. Please visit the URL below and copy the authorization code."
 		}
-		
+
 		cmd := m.authModal.Show(components.AuthModalConfig{
-			Title:    "Claude Max Authentication",
-			Message:  message,
-			URL:      msg.URL,
-			Width:    m.viewport.width,
-			Height:   m.viewport.height,
+			Title:   "Claude Max Authentication",
+			Message: message,
+			URL:     msg.URL,
+			Width:   m.viewport.width,
+			Height:  m.viewport.height,
 			OnSubmit: func(code string) tea.Cmd {
 				return m.handleAuthCode(code, m.authVerifier)
 			},
@@ -536,12 +536,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			},
 		})
 		return m, cmd
-		
+
 	case AuthFlowCompleteMsg:
 		// Handle auth flow completion
 		m.authVerifier = ""
 		m.authModal.Hide()
-		
+
 		if msg.Success {
 			// Reinitialize client
 			newClient, err := auth.NewClient()
@@ -563,7 +563,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Already handled by the calling function
 			return m, nil
 		}
-		
+
 	case ShowStatuslineMsg:
 		if m.statusline != nil {
 			message := &components.StatuslineMessage{
@@ -590,7 +590,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		return m, nil
-	
+
 	}
 
 	m.textarea, cmd = m.textarea.Update(msg)
@@ -1241,7 +1241,7 @@ func (m Model) shouldAutoCompact() bool {
 	if m.processing {
 		return false
 	}
-	
+
 	// Check if we're at or above 95% capacity
 	percentage := float64(m.contextTokens) / float64(m.maxContextTokens)
 	return percentage >= 0.95
@@ -1261,7 +1261,7 @@ func (m Model) checkAutoCompaction() tea.Cmd {
 			}
 		}
 	}
-	
+
 	// Check if we should auto-compact
 	if m.shouldAutoCompact() {
 		// Trigger auto-compaction
@@ -1273,7 +1273,7 @@ func (m Model) checkAutoCompaction() tea.Cmd {
 			}
 		}
 	}
-	
+
 	return nil
 }
 
@@ -1349,15 +1349,15 @@ func countTokens(text string) int {
 // countConversationTokens counts the total tokens in the conversation history
 func (m Model) countConversationTokens() int {
 	tokens := 0
-	
+
 	// Count system prompt tokens (from systemPromptContent)
 	tokens += countTokens(systemPromptContent)
-	
+
 	// Count message tokens
 	for _, msg := range m.messages {
 		if msg.Role == "user" || msg.Role == "assistant" {
 			tokens += countTokens(msg.Content)
-			
+
 			// Count tool invocation/result tokens
 			if msg.ToolInfo != nil {
 				tokens += countTokens(msg.ToolInfo.Input)
@@ -1365,7 +1365,6 @@ func (m Model) countConversationTokens() int {
 			}
 		}
 	}
-	
+
 	return tokens
 }
-

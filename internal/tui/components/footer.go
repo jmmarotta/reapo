@@ -49,11 +49,11 @@ func (f *FooterComponent) Render() string {
 
 	// Format context usage
 	percentage := float64(f.contextTokens) / float64(f.maxContextTokens) * 100
-	contextText := fmt.Sprintf("%s/%s (%.1f%%)", 
-		formatTokenCount(f.contextTokens), 
+	contextText := fmt.Sprintf("%s/%s (%.1f%%)",
+		formatTokenCount(f.contextTokens),
 		formatTokenCount(f.maxContextTokens),
 		percentage)
-	
+
 	// Choose color based on usage percentage
 	var contextColor string
 	if percentage < 50 {
@@ -63,63 +63,63 @@ func (f *FooterComponent) Render() string {
 	} else {
 		contextColor = "1" // Red
 	}
-	
+
 	leftText := "reapo"
 	rightText := f.modelName
 
 	// Build the sections with proper spacing
 	// Layout: reapo | pwd | context | model
 	sections := []string{leftText, pwd, contextText, rightText}
-	
+
 	// Calculate spacing between sections
 	totalContentWidth := 0
 	for _, section := range sections {
 		totalContentWidth += len(section)
 	}
-	
+
 	// Account for separators (3 spaces between each section) and padding
 	separatorCount := len(sections) - 1
 	totalSeparatorWidth := separatorCount * 3
 	availableWidth := remainingWidth - totalContentWidth - totalSeparatorWidth - 2
-	
+
 	// Distribute extra space evenly
 	extraSpacePerGap := availableWidth / separatorCount
 	if extraSpacePerGap < 0 {
 		extraSpacePerGap = 0
 	}
-	
+
 	// Create the colored context text
 	contextStyled := lipgloss.NewStyle().
 		Foreground(lipgloss.Color(contextColor)).
 		Background(lipgloss.Color("236")).
 		Render(contextText)
-	
+
 	// Build footer parts
 	separator := strings.Repeat(" ", 3+extraSpacePerGap)
-	
+
 	// Style each part with consistent background
 	styledLeft := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("245")).
 		Background(lipgloss.Color("236")).
 		Render(leftText)
-		
+
 	styledPwd := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("245")).
 		Background(lipgloss.Color("236")).
 		Render(pwd)
-		
+
 	styledRight := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("245")).
 		Background(lipgloss.Color("236")).
 		Render(rightText)
-		
+
 	styledSeparator := lipgloss.NewStyle().
 		Background(lipgloss.Color("236")).
 		Render(separator)
-	
+
 	// Compose the footer
 	composedFooter := styledLeft + styledSeparator + styledPwd + styledSeparator + contextStyled + styledSeparator + styledRight
-	
+
 	// Ensure the footer fills the entire width with padding
 	paddingNeeded := remainingWidth - lipgloss.Width(composedFooter) - 2 // -2 for left/right padding
 	if paddingNeeded > 0 {
@@ -127,7 +127,7 @@ func (f *FooterComponent) Render() string {
 			Background(lipgloss.Color("236")).
 			Render(strings.Repeat(" ", paddingNeeded))
 	}
-	
+
 	mainFooter := lipgloss.NewStyle().
 		Background(lipgloss.Color("236")).
 		Width(remainingWidth).

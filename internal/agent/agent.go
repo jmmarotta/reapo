@@ -149,13 +149,27 @@ func (a *Agent) RunInference(ctx context.Context, conversation []anthropic.Messa
 		"toolCount": len(anthropicTools),
 	})
 
-	message, err := a.client.Messages.New(ctx, anthropic.MessageNewParams{
+	// Use streaming API to avoid timeout issues
+	stream := a.client.Messages.NewStreaming(ctx, anthropic.MessageNewParams{
 		Model:     config.GetModel(),
 		MaxTokens: int64(config.GetMaxTokens()),
 		Messages:  conversation,
 		Tools:     anthropicTools,
 		System:    []anthropic.TextBlockParam{{Type: "text", Text: a.systemPrompt}},
 	})
+
+	// Accumulate the message from stream
+	message := anthropic.Message{}
+	for stream.Next() {
+		event := stream.Current()
+		err := message.Accumulate(event)
+		if err != nil {
+			logger.Error("Failed to accumulate stream event: %v", err)
+			break
+		}
+	}
+
+	err := stream.Err()
 
 	// Log the chat response
 	if err != nil {
@@ -167,7 +181,7 @@ func (a *Agent) RunInference(ctx context.Context, conversation []anthropic.Messa
 		logger.Chat("RESPONSE", message)
 	}
 
-	return message, err
+	return &message, err
 }
 
 // ExecuteToolsConcurrently runs multiple tools in parallel

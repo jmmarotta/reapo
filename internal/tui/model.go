@@ -31,16 +31,16 @@ type Model struct {
 	processing        bool
 	processingText    string // Text to show during processing
 	processingSpinner *components.SpinnerComponent
-	contextTokens     int    // Current context window usage in tokens
-	maxContextTokens  int    // Maximum context window size (200k for both models)
-	currentModel      string // Current model being used
+	contextTokens     int                                     // Current context window usage in tokens
+	maxContextTokens  int                                     // Maximum context window size (200k for both models)
+	currentModel      string                                  // Current model being used
 	spinners          map[string]*components.SpinnerComponent // Track spinners by message ID
 	helpModal         *components.HelpModal                   // Help modal
 	statusModal       *components.StatusModal                 // Status modal
 	statusline        *components.StatuslineComponent         // Statusline for messages
 	// Auth state
-	authVerifier      string // OAuth verifier for code exchange
-	authModal         components.AuthModal
+	authVerifier string // OAuth verifier for code exchange
+	authModal    components.AuthModal
 }
 
 // AgentResponseMsg represents a message from the agent
@@ -163,7 +163,7 @@ func NewModel(client anthropic.Client, toolDefs []tools.ToolDefinition) Model {
 
 	// Calculate initial token count from system prompt
 	initialTokens := len(systemPromptContent) / 4 // Standard approximation: 1 token ≈ 4 characters
-	
+
 	model := Model{
 		messages:         []components.Message{},
 		textarea:         ta,

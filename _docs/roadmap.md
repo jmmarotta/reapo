@@ -1,35 +1,42 @@
-- Add tools for parity with opencode
-- mark todo as in progress
+- reconcile multiple tools
+
+- tools have output
+
+- tools ask for permission (for certain tools)
+   - Yes
+   - No, and specify what to do
+
+- plan and build modes
+  - planning tool
+
+- certain tools always need permission
+  - set in config
+  - probably for bash tool
+
+- mark todo as in progress (ensure this is the case)
+- cannot write to file before read
 
 - Anthropic prompt caching
 
 - put text input in middle until there is more text
-
-- Cerebras / OpenAPI provider
 
 - refactor update.go
   - refactor out slash commands "/" and file/dir references "@"
 
 - cancel API calls
 
+- recover from errors in request (retry)
+
+- Cerebras / OpenAPI provider
+
 - Improve in progress request (padding and color)
   - time taken
   - tokens ingested
-
-- tools ask for permission:
-   - Yes
-   - Yes for all
-   - No, and specify what to do
-
-- cannot write to file before read
 
 - persist sessions
 
 - add conversation history to tui model to keep track of conversations
   - building for now. Probably need a session model
-
-- plan and build modes
-  - planning tool
 
 - allow different models in different modes
 

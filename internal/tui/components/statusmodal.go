@@ -107,7 +107,7 @@ func (m StatusModal) View() string {
 
 	// Build content
 	var content strings.Builder
-	
+
 	content.WriteString(titleStyle.Render(m.title))
 	content.WriteString("\n\n")
 	content.WriteString(contentStyle.Render("Auth: " + m.authStatus))

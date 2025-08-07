@@ -13,10 +13,10 @@ import (
 )
 
 const (
-	clientID     = "9d1c250a-e61b-44d9-88ed-5944d1962f5e"
-	redirectURI  = "https://console.anthropic.com/oauth/code/callback"
-	authScope    = "org:create_api_key user:profile user:inference"
-	tokenURL     = "https://console.anthropic.com/v1/oauth/token"
+	clientID    = "9d1c250a-e61b-44d9-88ed-5944d1962f5e"
+	redirectURI = "https://console.anthropic.com/oauth/code/callback"
+	authScope   = "org:create_api_key user:profile user:inference"
+	tokenURL    = "https://console.anthropic.com/v1/oauth/token"
 )
 
 // PKCEPair represents PKCE challenge and verifier
@@ -46,15 +46,15 @@ func GeneratePKCE() (*PKCEPair, error) {
 	if _, err := rand.Read(verifierBytes); err != nil {
 		return nil, fmt.Errorf("failed to generate random bytes: %w", err)
 	}
-	
+
 	// Create base64url encoded verifier
 	verifier := base64.RawURLEncoding.EncodeToString(verifierBytes)
-	
+
 	// Create SHA256 hash of verifier for challenge
 	h := sha256.New()
 	h.Write([]byte(verifier))
 	challenge := base64.RawURLEncoding.EncodeToString(h.Sum(nil))
-	
+
 	return &PKCEPair{
 		Verifier:  verifier,
 		Challenge: challenge,
@@ -67,13 +67,13 @@ func Authorize() (*AuthorizeResult, error) {
 	if err != nil {
 		return nil, err
 	}
-	
+
 	authURL := url.URL{
 		Scheme: "https",
 		Host:   "claude.ai",
 		Path:   "/oauth/authorize",
 	}
-	
+
 	q := authURL.Query()
 	q.Set("code", "true")
 	q.Set("client_id", clientID)
@@ -89,7 +89,7 @@ func Authorize() (*AuthorizeResult, error) {
 	// OAuth, so this may be specifically required by their OAuth server.
 	q.Set("state", pkce.Verifier)
 	authURL.RawQuery = q.Encode()
-	
+
 	return &AuthorizeResult{
 		URL:      authURL.String(),
 		Verifier: pkce.Verifier,
@@ -101,12 +101,12 @@ func Exchange(code, verifier string) (*OAuthInfo, error) {
 	// Split code and state if they're combined with #
 	parts := bytes.Split([]byte(code), []byte("#"))
 	authCode := string(parts[0])
-	
+
 	var state string
 	if len(parts) > 1 {
 		state = string(parts[1])
 	}
-	
+
 	// Prepare request body
 	reqBody := map[string]string{
 		"code":          authCode,
@@ -116,28 +116,28 @@ func Exchange(code, verifier string) (*OAuthInfo, error) {
 		"redirect_uri":  redirectURI,
 		"code_verifier": verifier,
 	}
-	
+
 	jsonBody, err := json.Marshal(reqBody)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
-	
+
 	// Make token exchange request
 	resp, err := http.Post(tokenURL, "application/json", bytes.NewBuffer(jsonBody))
 	if err != nil {
 		return nil, fmt.Errorf("failed to exchange code: %w", err)
 	}
 	defer resp.Body.Close()
-	
+
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("token exchange failed with status %d", resp.StatusCode)
 	}
-	
+
 	var tokenResp TokenResponse
 	if err := json.NewDecoder(resp.Body).Decode(&tokenResp); err != nil {
 		return nil, fmt.Errorf("failed to decode token response: %w", err)
 	}
-	
+
 	return &OAuthInfo{
 		AuthType:     AuthTypeOAuth,
 		RefreshToken: tokenResp.RefreshToken,
@@ -153,27 +153,27 @@ func RefreshToken(refreshToken string) (*OAuthInfo, error) {
 		"refresh_token": refreshToken,
 		"client_id":     clientID,
 	}
-	
+
 	jsonBody, err := json.Marshal(reqBody)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
-	
+
 	resp, err := http.Post(tokenURL, "application/json", bytes.NewBuffer(jsonBody))
 	if err != nil {
 		return nil, fmt.Errorf("failed to refresh token: %w", err)
 	}
 	defer resp.Body.Close()
-	
+
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("token refresh failed with status %d", resp.StatusCode)
 	}
-	
+
 	var tokenResp TokenResponse
 	if err := json.NewDecoder(resp.Body).Decode(&tokenResp); err != nil {
 		return nil, fmt.Errorf("failed to decode token response: %w", err)
 	}
-	
+
 	return &OAuthInfo{
 		AuthType:     AuthTypeOAuth,
 		RefreshToken: tokenResp.RefreshToken,
@@ -188,35 +188,35 @@ func GetAccessToken(provider string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	
+
 	if info == nil {
 		return "", fmt.Errorf("no auth info found for %s", provider)
 	}
-	
+
 	switch auth := info.(type) {
 	case *OAuthInfo:
 		// Check if token is still valid
 		if auth.AccessToken != "" && time.Now().Before(auth.ExpiresAt) {
 			return auth.AccessToken, nil
 		}
-		
+
 		// Need to refresh
 		if auth.RefreshToken == "" {
 			return "", fmt.Errorf("no refresh token available")
 		}
-		
+
 		newAuth, err := RefreshToken(auth.RefreshToken)
 		if err != nil {
 			return "", fmt.Errorf("failed to refresh token: %w", err)
 		}
-		
+
 		// Save the new auth info
 		if err := Set(provider, newAuth); err != nil {
 			return "", fmt.Errorf("failed to save refreshed token: %w", err)
 		}
-		
+
 		return newAuth.AccessToken, nil
-		
+
 	default:
 		return "", fmt.Errorf("unknown auth type")
 	}

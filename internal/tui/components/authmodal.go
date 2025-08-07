@@ -10,15 +10,15 @@ import (
 
 // AuthModal is a modal dialog for authentication input
 type AuthModal struct {
-	active      bool
-	title       string
-	message     string
-	url         string
-	input       textinput.Model
-	width       int
-	height      int
-	onSubmit    func(string) tea.Cmd
-	onCancel    func() tea.Cmd
+	active   bool
+	title    string
+	message  string
+	url      string
+	input    textinput.Model
+	width    int
+	height   int
+	onSubmit func(string) tea.Cmd
+	onCancel func() tea.Cmd
 }
 
 // NewAuthModal creates a new auth modal
@@ -27,7 +27,7 @@ func NewAuthModal() AuthModal {
 	ti.Placeholder = "Paste authorization code here..."
 	ti.CharLimit = 256
 	ti.Width = 50
-	
+
 	return AuthModal{
 		input: ti,
 	}
@@ -56,14 +56,14 @@ func (m *AuthModal) Show(config AuthModalConfig) tea.Cmd {
 	m.onCancel = config.OnCancel
 	m.input.Reset()
 	m.input.Focus()
-	
+
 	// Calculate initial input width (same as in View)
 	modalWidth := m.width * 85 / 100
 	if modalWidth < 60 {
 		modalWidth = min(60, m.width-4)
 	}
 	m.input.Width = max(10, modalWidth-6)
-	
+
 	return textinput.Blink
 }
 
@@ -84,7 +84,7 @@ func (m AuthModal) Update(msg tea.Msg) (AuthModal, tea.Cmd) {
 	if !m.active {
 		return m, nil
 	}
-	
+
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.Type {
@@ -100,7 +100,7 @@ func (m AuthModal) Update(msg tea.Msg) (AuthModal, tea.Cmd) {
 				return m, m.onCancel()
 			}
 		}
-	
+
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
@@ -112,7 +112,7 @@ func (m AuthModal) Update(msg tea.Msg) (AuthModal, tea.Cmd) {
 		// Adjust input width to fit modal (modal padding is 2 on each side, plus some margin)
 		m.input.Width = max(10, modalWidth-6)
 	}
-	
+
 	// Update the text input
 	var cmd tea.Cmd
 	m.input, cmd = m.input.Update(msg)
@@ -124,66 +124,66 @@ func (m AuthModal) View() string {
 	if !m.active {
 		return ""
 	}
-	
+
 	// Handle very small terminals
 	if m.width < 20 || m.height < 10 {
 		return "Terminal too small"
 	}
-	
+
 	// Calculate modal width - 85% of screen width
 	modalWidth := m.width * 85 / 100
 	// Ensure minimum width for usability
 	if modalWidth < 60 {
 		modalWidth = min(60, m.width-4)
 	}
-	
+
 	// Define styles
 	modalStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(lipgloss.Color("39")).
 		Padding(1, 2).
 		Width(modalWidth)
-	
+
 	titleStyle := lipgloss.NewStyle().
 		Bold(true).
 		Foreground(lipgloss.Color("39")).
 		MarginBottom(1).
 		Align(lipgloss.Center).
 		Width(modalWidth - 4) // Account for padding
-	
+
 	messageStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("241")).
 		MarginBottom(1).
 		Width(modalWidth - 4)
-	
+
 	urlLabelStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("241")).
 		Bold(true)
-	
+
 	urlStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("33")).
 		MarginBottom(1).
 		Width(modalWidth - 4)
-	
+
 	helpStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("241")).
 		MarginTop(1).
 		Align(lipgloss.Center).
 		Width(modalWidth - 4)
-	
+
 	// Build content
 	var content strings.Builder
-	
+
 	if m.title != "" {
 		content.WriteString(titleStyle.Render(m.title))
 		content.WriteString("\n")
 	}
-	
+
 	if m.message != "" {
 		content.WriteString(messageStyle.Render(m.message))
 		content.WriteString("\n")
 	}
-	
+
 	if m.url != "" {
 		// Wrap URL if needed
 		content.WriteString(urlLabelStyle.Render("Visit this URL:"))
@@ -192,15 +192,15 @@ func (m AuthModal) View() string {
 		content.WriteString(urlStyle.Render(wrappedURL))
 		content.WriteString("\n")
 	}
-	
+
 	// Adjust input width to fit modal
 	m.input.Width = max(10, modalWidth-6)
 	content.WriteString(m.input.View())
 	content.WriteString("\n")
 	content.WriteString(helpStyle.Render("Enter to submit • Esc to cancel"))
-	
+
 	modal := modalStyle.Render(content.String())
-	
+
 	// Center the modal vertically and horizontally
 	return lipgloss.Place(
 		m.width,
@@ -231,11 +231,11 @@ func wrapURL(text string, width int) string {
 	if width <= 0 {
 		return text
 	}
-	
+
 	if len(text) <= width {
 		return text
 	}
-	
+
 	var result strings.Builder
 	for i := 0; i < len(text); i += width {
 		end := i + width

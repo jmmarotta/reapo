@@ -19,7 +19,6 @@ type SetProcessingMsg struct {
 	Active bool
 }
 
-
 type AuthFlowCompleteMsg struct {
 	Success bool
 	Message string
@@ -39,13 +38,13 @@ func (m Model) startLoginFlow() tea.Cmd {
 			}
 		}
 	}
-	
+
 	// Store verifier
 	verifier := authResult.Verifier
-	
+
 	// Try to open browser
 	browserErr := browser.OpenURL(authResult.URL)
-	
+
 	// Return a sequence of messages instead of batch to ensure order
 	return func() tea.Msg {
 		return StoreVerifierAndShowModalMsg{
@@ -68,13 +67,13 @@ func (m Model) startLogoutFlow() tea.Cmd {
 			}
 		}
 	}
-	
+
 	// Log the logout attempt
 	logger.Info("Logging out user")
-	
+
 	// Remove auth immediately
 	if err := auth.Remove("anthropic"); err != nil {
-		logger.Error("Failed to logout", "error", err)
+		logger.Error("Failed to logout: %v", err)
 		return func() tea.Msg {
 			return ShowStatuslineMsg{
 				Type:     components.StatuslineError,
@@ -83,9 +82,9 @@ func (m Model) startLogoutFlow() tea.Cmd {
 			}
 		}
 	}
-	
+
 	logger.Info("Successfully logged out")
-	
+
 	return func() tea.Msg {
 		return AuthFlowCompleteMsg{
 			Success: true,
@@ -105,17 +104,15 @@ func (m Model) handleAuthCode(code string, verifier string) tea.Cmd {
 			}
 		},
 	}
-	
+
 	// Exchange code for tokens in a separate goroutine
 	cmds = append(cmds, func() tea.Msg {
 		// Log the exchange attempt
-		logger.Info("Attempting OAuth code exchange", 
-			"code_length", len(code),
-			"verifier_length", len(verifier))
-		
+		logger.Info("Attempting OAuth code exchange: code_length=%d, verifier_length=%d", len(code), len(verifier))
+
 		oauthInfo, err := auth.Exchange(code, verifier)
 		if err != nil {
-			logger.Error("OAuth exchange failed", "error", err)
+			logger.Error("OAuth exchange failed: %v", err)
 			// Parse specific error types
 			errorMsg := "Error: Authentication failed"
 			if len(code) == 0 {
@@ -131,42 +128,36 @@ func (m Model) handleAuthCode(code string, verifier string) tea.Cmd {
 			} else {
 				errorMsg = fmt.Sprintf("Error: Authentication failed: %v", err)
 			}
-			
+
 			return ShowStatuslineMsg{
 				Type:     components.StatuslineError,
 				Text:     errorMsg,
 				Duration: 6 * time.Second,
 			}
 		}
-		
-		logger.Info("OAuth exchange successful",
-			"has_access_token", oauthInfo.AccessToken != "",
-			"has_refresh_token", oauthInfo.RefreshToken != "",
-			"expires_at", oauthInfo.ExpiresAt)
-		
+
+		logger.Info("OAuth exchange successful: has_access_token=%v, has_refresh_token=%v, expires_at=%v", oauthInfo.AccessToken != "", oauthInfo.RefreshToken != "", oauthInfo.ExpiresAt)
+
 		// Save auth info
 		if err := auth.Set("anthropic", oauthInfo); err != nil {
-			logger.Error("Failed to save auth info", "error", err)
+			logger.Error("Failed to save auth info: %v", err)
 			return ShowStatuslineMsg{
 				Type:     components.StatuslineError,
 				Text:     fmt.Sprintf("Error: Failed to save authentication: %v", err),
 				Duration: 6 * time.Second,
 			}
 		}
-		
-		logger.Info("Auth info saved successfully", "provider", "anthropic")
-		
+
+		logger.Info("Auth info saved successfully: provider=%s", "anthropic")
+
 		return AuthFlowCompleteMsg{
 			Success: true,
 			Message: "Successfully authenticated with Claude Max",
 		}
 	})
-	
+
 	return tea.Batch(cmds...)
 }
-
-
-
 
 // Helper message types
 type ShowAuthModalMsg struct {
