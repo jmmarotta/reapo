@@ -972,10 +972,10 @@ func (m Model) executeFileReferences(text string) ([]anthropic.MessageParam, []t
 		toolID := generateMessageID()
 
 		if info.IsDir() {
-			// Create tool use block for list_files
+			// Create tool use block for ls
 			toolInput := map[string]string{"path": ref}
 			toolInputJSON, _ := json.Marshal(toolInput)
-			toolUseBlocks = append(toolUseBlocks, anthropic.NewToolUseBlock(toolID, toolInput, "list_files"))
+			toolUseBlocks = append(toolUseBlocks, anthropic.NewToolUseBlock(toolID, toolInput, "ls"))
 
 			// Create command to show tool invocation message
 			cmd := func(ref string) tea.Cmd {
@@ -984,7 +984,7 @@ func (m Model) executeFileReferences(text string) ([]anthropic.MessageParam, []t
 						Message: components.Message{
 							ID:        generateMessageID(),
 							Role:      "assistant",
-							Content:   fmt.Sprintf("list_files(%s)", ref),
+							Content:   fmt.Sprintf("ls(%s)", ref),
 							Type:      components.MessageTypeText,
 							Status:    components.MessageCompleted,
 							Timestamp: time.Now(),
@@ -995,8 +995,8 @@ func (m Model) executeFileReferences(text string) ([]anthropic.MessageParam, []t
 			}(ref)
 			cmds = append(cmds, cmd)
 
-			// Execute list_files tool and get result
-			result := m.agent.ExecuteTool(toolID, "list_files", toolInputJSON)
+			// Execute ls tool and get result
+			result := m.agent.ExecuteTool(toolID, "ls", toolInputJSON)
 			toolResultBlocks = append(toolResultBlocks, result)
 		} else {
 			// Create tool use block for read_file
@@ -1169,7 +1169,7 @@ func formatToolArguments(toolName string, input json.RawMessage) string {
 		if err := json.Unmarshal(input, &args); err == nil && args.Path != "" {
 			return args.Path
 		}
-	case "list_files":
+	case "ls":
 		var args struct {
 			Path string `json:"path"`
 		}

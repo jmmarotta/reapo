@@ -1,4 +1,4 @@
-- reconcile multiple tools
+- prompts in separate txt file
 
 - tools have output
 

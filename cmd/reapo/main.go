@@ -54,7 +54,6 @@ func main() {
 		tools.MultiEditDefinition,
 		// Directory operations
 		tools.LSDefinition,
-		tools.ListFilesDefinition, // Keep for backward compatibility
 		// Search operations
 		tools.GlobDefinition,
 		tools.GrepDefinition,

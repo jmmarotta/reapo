@@ -68,7 +68,7 @@ func ShouldShowToolOutput(toolName string) bool {
 		"todoread":   true,
 		"todowrite":  true,
 		"run_task":   true,
-		"list_files": true,
+		"ls":         true,
 	}
 
 	// Tools that should only show invocation (no output)
