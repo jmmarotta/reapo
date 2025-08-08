@@ -1159,17 +1159,92 @@ func (m Model) startAnimation() tea.Cmd {
 	})
 }
 
+// truncateWithEllipsis truncates a string to maxLen, adding ellipsis if needed
+func truncateWithEllipsis(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	if maxLen <= 3 {
+		return "..."
+	}
+	return s[:maxLen-3] + "..."
+}
+
+// formatEditAsDiff formats an edit operation as a diff display
+func formatEditAsDiff(oldString, newString string, maxLen int) string {
+	oldTrunc := truncateWithEllipsis(oldString, maxLen)
+	newTrunc := truncateWithEllipsis(newString, maxLen)
+	
+	// Replace newlines with visible marker for single-line display
+	oldTrunc = strings.ReplaceAll(oldTrunc, "\n", "↵")
+	newTrunc = strings.ReplaceAll(newTrunc, "\n", "↵")
+	
+	return fmt.Sprintf("- %s\n  + %s", oldTrunc, newTrunc)
+}
+
+// formatWriteContent formats write content with a preview
+func formatWriteContent(content string, maxLen int) string {
+	lines := strings.Split(content, "\n")
+	preview := ""
+	
+	if len(lines) > 3 {
+		// Show first 3 lines
+		for i := 0; i < 3 && i < len(lines); i++ {
+			line := truncateWithEllipsis(lines[i], maxLen)
+			if i > 0 {
+				preview += "\n  "
+			}
+			preview += line
+		}
+		preview += fmt.Sprintf("\n  ... (%d more lines)", len(lines)-3)
+	} else {
+		// Show all lines if 3 or fewer
+		for i, line := range lines {
+			line = truncateWithEllipsis(line, maxLen)
+			if i > 0 {
+				preview += "\n  "
+			}
+			preview += line
+		}
+	}
+	
+	return preview
+}
+
 // formatToolArguments formats tool arguments for display
 func formatToolArguments(toolName string, input json.RawMessage) string {
 	switch toolName {
 	// File operation tools - show path
-	case "read", "edit", "write":
+	case "read":
 		var args struct {
 			FilePath string `json:"file_path"`
 		}
 		if err := json.Unmarshal(input, &args); err == nil && args.FilePath != "" {
 			return args.FilePath
 		}
+		
+	case "edit":
+		var args struct {
+			FilePath  string `json:"file_path"`
+			OldString string `json:"old_string"`
+			NewString string `json:"new_string"`
+		}
+		if err := json.Unmarshal(input, &args); err == nil && args.FilePath != "" {
+			// Format as: filepath\n  - old\n  + new
+			diff := formatEditAsDiff(args.OldString, args.NewString, 40)
+			return fmt.Sprintf("%s\n  %s", args.FilePath, diff)
+		}
+		
+	case "write":
+		var args struct {
+			FilePath string `json:"file_path"`
+			Content  string `json:"content"`
+		}
+		if err := json.Unmarshal(input, &args); err == nil && args.FilePath != "" {
+			preview := formatWriteContent(args.Content, 60)
+			return fmt.Sprintf("%s\n  %s", args.FilePath, preview)
+		}
+		
 	case "ls":
 		var args struct {
 			Path string `json:"path"`
@@ -1178,12 +1253,30 @@ func formatToolArguments(toolName string, input json.RawMessage) string {
 			return args.Path
 		}
 		return "." // Default to current directory
+		
 	case "multiedit":
 		var args struct {
 			FilePath string `json:"file_path"`
+			Edits    []struct {
+				OldString string `json:"old_string"`
+				NewString string `json:"new_string"`
+			} `json:"edits"`
 		}
 		if err := json.Unmarshal(input, &args); err == nil && args.FilePath != "" {
-			return args.FilePath
+			result := args.FilePath
+			if len(args.Edits) > 0 {
+				result += fmt.Sprintf(" (%d edits)", len(args.Edits))
+				// Show up to first 2 edits
+				for i, edit := range args.Edits {
+					if i >= 2 {
+						result += fmt.Sprintf("\n  ... (%d more edits)", len(args.Edits)-2)
+						break
+					}
+					diff := formatEditAsDiff(edit.OldString, edit.NewString, 35)
+					result += fmt.Sprintf("\n  [%d] %s", i+1, diff)
+				}
+			}
+			return result
 		}
 
 	// Pattern/search tools - show pattern or query
