@@ -1162,12 +1162,13 @@ func (m Model) startAnimation() tea.Cmd {
 // formatToolArguments formats tool arguments for display
 func formatToolArguments(toolName string, input json.RawMessage) string {
 	switch toolName {
-	case "read_file", "edit_file", "write_file":
+	// File operation tools - show path
+	case "read", "edit", "write":
 		var args struct {
-			Path string `json:"path"`
+			FilePath string `json:"file_path"`
 		}
-		if err := json.Unmarshal(input, &args); err == nil && args.Path != "" {
-			return args.Path
+		if err := json.Unmarshal(input, &args); err == nil && args.FilePath != "" {
+			return args.FilePath
 		}
 	case "ls":
 		var args struct {
@@ -1177,21 +1178,81 @@ func formatToolArguments(toolName string, input json.RawMessage) string {
 			return args.Path
 		}
 		return "." // Default to current directory
+	case "multiedit":
+		var args struct {
+			FilePath string `json:"file_path"`
+		}
+		if err := json.Unmarshal(input, &args); err == nil && args.FilePath != "" {
+			return args.FilePath
+		}
+
+	// Pattern/search tools - show pattern or query
+	case "glob":
+		var args struct {
+			Pattern string `json:"pattern"`
+		}
+		if err := json.Unmarshal(input, &args); err == nil && args.Pattern != "" {
+			return args.Pattern
+		}
+	case "grep":
+		var args struct {
+			Pattern string `json:"pattern"`
+		}
+		if err := json.Unmarshal(input, &args); err == nil && args.Pattern != "" {
+			// Truncate long patterns
+			if len(args.Pattern) > 50 {
+				return args.Pattern[:47] + "..."
+			}
+			return args.Pattern
+		}
+	case "websearch":
+		var args struct {
+			Query string `json:"query"`
+		}
+		if err := json.Unmarshal(input, &args); err == nil && args.Query != "" {
+			// Truncate long queries
+			if len(args.Query) > 50 {
+				return args.Query[:47] + "..."
+			}
+			return args.Query
+		}
+	case "webfetch":
+		var args struct {
+			URL string `json:"url"`
+		}
+		if err := json.Unmarshal(input, &args); err == nil && args.URL != "" {
+			// Truncate long URLs
+			if len(args.URL) > 60 {
+				return args.URL[:57] + "..."
+			}
+			return args.URL
+		}
+
+	// Command execution tools
+	case "bash":
+		var args struct {
+			Command string `json:"command"`
+		}
+		if err := json.Unmarshal(input, &args); err == nil && args.Command != "" {
+			// Truncate long commands
+			if len(args.Command) > 50 {
+				return args.Command[:47] + "..."
+			}
+			return args.Command
+		}
+
+	// Task management tools
+	case "task":
+		var args struct {
+			Description string `json:"description"`
+		}
+		if err := json.Unmarshal(input, &args); err == nil && args.Description != "" {
+			return args.Description
+		}
 	case "todoread":
 		return "read"
 	case "todowrite":
 		return "write"
-	case "run_task":
-		var args struct {
-			Task string `json:"task"`
-		}
-		if err := json.Unmarshal(input, &args); err == nil && args.Task != "" {
-			// Truncate long tasks
-			if len(args.Task) > 50 {
-				return args.Task[:47] + "..."
-			}
-			return args.Task
-		}
 	}
 
 	// Default: show raw input if short, otherwise indicate complex args

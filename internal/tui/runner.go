@@ -16,10 +16,10 @@ func RunTUI(client anthropic.Client, toolDefs []tools.ToolDefinition, systemProm
 	if err != nil {
 		workingDir = "unknown"
 	}
-	
+
 	// Append working directory info to system prompt
 	systemPromptWithContext := systemPrompt + "\n\n# Environment Context\nCurrent working directory: " + workingDir
-	
+
 	// Set the system prompt for the TUI package
 	systemPromptContent = systemPromptWithContext
 
