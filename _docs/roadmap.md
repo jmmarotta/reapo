@@ -1,18 +1,36 @@
 - tools have output
+  - follow up: remove ...
+
+- Use Meyer's diff algorithm and style diff with lipgloss
+
+- chat is too large and collides with border of input
+- no scrolling in chat view
 
 - tools ask for permission (for certain tools)
    - Yes
    - No, and specify what to do
 
+- style markdown in chat view
+
 - plan and build modes
   - planning tool
+
+- bash should have a timeout
+
+- adjust prompts according to the lastest claude code version
+  - https://cchistory.mariozechner.at/
+  - https://mariozechner.at/posts/2025-08-03-cchistory/?utm_source=tldrai
 
 - certain tools always need permission
   - set in config
   - probably for bash tool
 
-- mark todo as in progress (ensure this is the case)
-- cannot write to file before read
+- ensure:
+  - mark todo as in progress
+  - cannot write to file before read
+
+- optimize bubbletea
+  - https://leg100.github.io/en/posts/building-bubbletea-programs/
 
 - Anthropic prompt caching
 
