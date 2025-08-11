@@ -15,6 +15,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"reapo/internal/agent"
 	"reapo/internal/auth"
+	"reapo/internal/diff"
 	"reapo/internal/logger"
 	"reapo/internal/tui/components"
 	"reapo/internal/tui/components/vimtextarea"
@@ -753,10 +754,81 @@ func (m Model) processToolUse(conversation []anthropic.MessageParam, response *a
 
 	// First, send all tool start messages immediately
 	for _, toolUse := range toolUses {
+		// Format tool invocation message
+		formattedArgs := formatToolArguments(toolUse.Name, toolUse.Input)
+		var content string
+		
+		// For edit/write/multiedit, add the diff below the invocation
+		if toolUse.Name == "edit" {
+			var args struct {
+				FilePath  string `json:"file_path"`
+				OldString string `json:"old_string"`
+				NewString string `json:"new_string"`
+			}
+			content = fmt.Sprintf("%s(%s)", toolUse.Name, formattedArgs)
+			if err := json.Unmarshal(toolUse.Input, &args); err == nil {
+				// Generate and indent the diff
+				diff := formatAsGitDiff(args.FilePath, args.OldString, args.NewString)
+				if diff != "" {
+					// Indent each line of the diff
+					lines := strings.Split(diff, "\n")
+					for _, line := range lines {
+						content += "\n   " + line
+					}
+				}
+			}
+		} else if toolUse.Name == "write" {
+			var args struct {
+				FilePath string `json:"file_path"`
+				Content  string `json:"content"`
+			}
+			content = fmt.Sprintf("%s(%s)", toolUse.Name, formattedArgs)
+			if err := json.Unmarshal(toolUse.Input, &args); err == nil {
+				// Generate and indent the diff for new file
+				diff := formatWriteContent(args.Content)
+				if diff != "" {
+					// Indent each line of the diff
+					lines := strings.Split(diff, "\n")
+					for _, line := range lines {
+						content += "\n   " + line
+					}
+				}
+			}
+		} else if toolUse.Name == "multiedit" {
+			var args struct {
+				FilePath string `json:"file_path"`
+				Edits    []struct {
+					OldString string `json:"old_string"`
+					NewString string `json:"new_string"`
+				} `json:"edits"`
+			}
+			content = fmt.Sprintf("%s(%s)", toolUse.Name, formattedArgs)
+			if err := json.Unmarshal(toolUse.Input, &args); err == nil {
+				// Show diffs for multiple edits
+				for i, edit := range args.Edits {
+					if i >= 3 {
+						content += fmt.Sprintf("\n   ... (%d more edits)", len(args.Edits)-3)
+						break
+					}
+					diff := formatAsGitDiff(args.FilePath, edit.OldString, edit.NewString)
+					content += fmt.Sprintf("\n   --- Edit %d ---", i+1)
+					if diff != "" {
+						lines := strings.Split(diff, "\n")
+						for _, line := range lines {
+							content += "\n   " + line
+						}
+					}
+				}
+			}
+		} else {
+			// For other tools, use the standard format
+			content = fmt.Sprintf("%s(%s)", toolUse.Name, formattedArgs)
+		}
+		
 		startMsg := components.Message{
 			ID:        generateMessageID(),
 			Role:      "assistant",
-			Content:   fmt.Sprintf("%s(%s)", toolUse.Name, formatToolArguments(toolUse.Name, toolUse.Input)),
+			Content:   content,
 			Type:      components.MessageTypeText,
 			Status:    components.MessageCompleted,
 			Timestamp: time.Now(),
@@ -1185,161 +1257,69 @@ func formatAsGitDiff(filePath string, oldString, newString string) string {
 	// Try to read the file for context
 	fileContent, err := os.ReadFile(filePath)
 	if err != nil {
-		// If we can't read the file, fall back to simple diff
-		return formatSimpleDiff(oldString, newString)
+		// If we can't read the file, use the new diff package for simple diff
+		result := diff.ComputeSimple(oldString, newString)
+		return diff.FormatWithLineNumbers(result)
 	}
 	
 	content := string(fileContent)
-	lines := strings.Split(content, "\n")
 	
-	// Find where the old string appears
+	// Find where the old string appears in the file
 	startLine := findLineNumber(content, oldString)
 	if startLine == -1 {
-		// Old string not found, show simple diff
-		return formatSimpleDiff(oldString, newString)
+		// Old string not found in file, use simple diff
+		result := diff.ComputeSimple(oldString, newString)
+		return diff.FormatWithLineNumbers(result)
 	}
 	
-	// Calculate how many lines the old and new strings span
+	// Build a synthetic file content with the change applied for diffing
+	lines := strings.Split(content, "\n")
 	oldLines := strings.Split(oldString, "\n")
-	newLines := strings.Split(newString, "\n")
 	
-	// Build the diff with context (3 lines before and after)
-	contextBefore := 3
-	contextAfter := 3
+	// Create the modified content
+	var modifiedLines []string
+	modifiedLines = append(modifiedLines, lines[:startLine-1]...)
+	modifiedLines = append(modifiedLines, strings.Split(newString, "\n")...)
+	modifiedLines = append(modifiedLines, lines[startLine-1+len(oldLines):]...)
+	modifiedContent := strings.Join(modifiedLines, "\n")
 	
-	startContext := startLine - contextBefore
-	if startContext < 1 {
-		startContext = 1
+	// Use the optimized diff algorithm
+	opts := diff.Options{
+		Context: 3,
+		IgnoreWhitespace: false,
 	}
+	result := diff.ComputeOptimized(content, modifiedContent, opts)
 	
-	endContext := startLine + len(oldLines) - 1 + contextAfter
-	if endContext > len(lines) {
-		endContext = len(lines)
-	}
-	
-	// Calculate max line number for padding
-	maxLineNum := endContext
-	if newLineNum := startContext + (endContext - startContext) - len(oldLines) + len(newLines); newLineNum > maxLineNum {
-		maxLineNum = newLineNum
-	}
-	lineNumWidth := len(fmt.Sprintf("%d", maxLineNum))
-	
-	// Build the diff
-	var diff strings.Builder
-	
-	// Add the hunk header
-	oldStart := startContext
-	oldCount := endContext - startContext + 1
-	newStart := startContext
-	newCount := oldCount - len(oldLines) + len(newLines)
-	
-	diff.WriteString(fmt.Sprintf("@@ -%d,%d +%d,%d @@\n", oldStart, oldCount, newStart, newCount))
-	
-	// Track line numbers
-	oldLineNum := startContext
-	newLineNum := startContext
-	
-	// Add context before
-	for i := startContext - 1; i < startLine - 1 && i < len(lines); i++ {
-		diff.WriteString(fmt.Sprintf("%*d    %s\n", lineNumWidth, oldLineNum, lines[i]))
-		oldLineNum++
-		newLineNum++
-	}
-	
-	// Add the removed lines
-	for _, line := range oldLines {
-		diff.WriteString(fmt.Sprintf("%*d -  %s\n", lineNumWidth, oldLineNum, line))
-		oldLineNum++
-	}
-	
-	// Add the added lines
-	for _, line := range newLines {
-		diff.WriteString(fmt.Sprintf("%*s +  %s\n", lineNumWidth, "", line))
-		newLineNum++
-	}
-	
-	// Add context after
-	endLine := startLine + len(oldLines) - 1
-	for i := endLine; i < endLine + contextAfter && i < len(lines); i++ {
-		diff.WriteString(fmt.Sprintf("%*d    %s\n", lineNumWidth, oldLineNum, lines[i]))
-		oldLineNum++
-		newLineNum++
-	}
-	
-	return strings.TrimSuffix(diff.String(), "\n")
+	// Format with line numbers
+	return diff.FormatWithLineNumbers(result)
 }
 
 // formatSimpleDiff formats a simple diff without file context
 func formatSimpleDiff(oldString, newString string) string {
-	oldLines := strings.Split(oldString, "\n")
-	newLines := strings.Split(newString, "\n")
-	
-	var diff strings.Builder
-	
-	// Since we don't have file context, we'll use simple sequential numbering
-	// starting from line 1 for illustration purposes
-	lineNum := 1
-	maxLines := len(oldLines)
-	if len(newLines) > maxLines {
-		maxLines = len(newLines)
-	}
-	lineNumWidth := len(fmt.Sprintf("%d", maxLines))
-	
-	// Add removed lines with line numbers
-	for _, line := range oldLines {
-		if line != "" || len(oldLines) > 1 {
-			diff.WriteString(fmt.Sprintf("%*d -  %s\n", lineNumWidth, lineNum, line))
-			lineNum++
-		}
-	}
-	
-	// Reset line number for added lines (they replace the removed ones)
-	lineNum = 1
-	
-	// Add added lines (no line numbers, just spacing)
-	for _, line := range newLines {
-		if line != "" || len(newLines) > 1 {
-			diff.WriteString(fmt.Sprintf("%*s +  %s\n", lineNumWidth, "", line))
-			lineNum++
-		}
-	}
-	
-	result := diff.String()
-	if result != "" && result[len(result)-1] == '\n' {
-		result = result[:len(result)-1]
-	}
-	return result
+	// Use the new diff package
+	result := diff.ComputeSimple(oldString, newString)
+	return diff.FormatWithLineNumbers(result)
 }
 
 // formatWriteContent formats write content as a new file diff
 func formatWriteContent(content string) string {
+	// Use the new diff package to format as an insertion
+	result := diff.ComputeSimple("", content)
+	
+	// Get the formatted output
+	formatted := diff.FormatWithLineNumbers(result)
+	
+	// If the content is very long, truncate it
 	lines := strings.Split(content, "\n")
-	var diff strings.Builder
-	
-	diff.WriteString(fmt.Sprintf("@@ -0,0 +1,%d @@\n", len(lines)))
-	
-	// Calculate line number width for padding
-	totalLines := len(lines)
-	if totalLines > 10 {
-		totalLines = 10 // We only show first 10 lines
-	}
-	lineNumWidth := len(fmt.Sprintf("%d", totalLines))
-	
-	// Show up to 10 lines of content with line numbers
-	maxLines := 10
-	for i, line := range lines {
-		if i >= maxLines {
-			diff.WriteString(fmt.Sprintf("%*s +  ... (%d more lines)\n", lineNumWidth, "", len(lines)-maxLines))
-			break
-		}
-		diff.WriteString(fmt.Sprintf("%*d +  %s\n", lineNumWidth, i+1, line))
+	if len(lines) > 10 {
+		// Re-compute with just first 10 lines
+		truncatedContent := strings.Join(lines[:10], "\n")
+		truncatedResult := diff.ComputeSimple("", truncatedContent)
+		formatted = diff.FormatWithLineNumbers(truncatedResult)
+		formatted += fmt.Sprintf("\n... (%d more lines)", len(lines)-10)
 	}
 	
-	result := diff.String()
-	if result != "" && result[len(result)-1] == '\n' {
-		result = result[:len(result)-1]
-	}
-	return result
+	return formatted
 }
 
 // formatToolArguments formats tool arguments for display
@@ -1361,9 +1341,9 @@ func formatToolArguments(toolName string, input json.RawMessage) string {
 			NewString string `json:"new_string"`
 		}
 		if err := json.Unmarshal(input, &args); err == nil && args.FilePath != "" {
-			// Format as git-style diff with context
-			diff := formatAsGitDiff(args.FilePath, args.OldString, args.NewString)
-			return fmt.Sprintf("%s\n%s", args.FilePath, diff)
+			// Just return the filename for the tool invocation line
+			// The diff will be handled separately
+			return args.FilePath
 		}
 		
 	case "write":
@@ -1372,9 +1352,9 @@ func formatToolArguments(toolName string, input json.RawMessage) string {
 			Content  string `json:"content"`
 		}
 		if err := json.Unmarshal(input, &args); err == nil && args.FilePath != "" {
-			// Format as new file creation
-			diff := formatWriteContent(args.Content)
-			return fmt.Sprintf("%s (new file)\n%s", args.FilePath, diff)
+			// Just return the filename for the tool invocation line
+			// The diff will be handled separately
+			return args.FilePath
 		}
 		
 	case "ls":
@@ -1395,19 +1375,9 @@ func formatToolArguments(toolName string, input json.RawMessage) string {
 			} `json:"edits"`
 		}
 		if err := json.Unmarshal(input, &args); err == nil && args.FilePath != "" {
-			result := fmt.Sprintf("%s (%d edits)", args.FilePath, len(args.Edits))
-			
-			// For multiple edits, show each as a separate hunk with git-style diff
-			for i, edit := range args.Edits {
-				if i >= 3 {
-					result += fmt.Sprintf("\n... (%d more edits)", len(args.Edits)-3)
-					break
-				}
-				// Use git-style diff with context for each edit
-				diff := formatAsGitDiff(args.FilePath, edit.OldString, edit.NewString)
-				result += fmt.Sprintf("\n--- Edit %d ---\n%s", i+1, diff)
-			}
-			return result
+			// Just return the filename with edit count for the tool invocation line
+			// The diff will be handled separately
+			return fmt.Sprintf("%s (%d edits)", args.FilePath, len(args.Edits))
 		}
 
 	// Pattern/search tools - show pattern or query
