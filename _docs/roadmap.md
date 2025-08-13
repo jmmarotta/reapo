@@ -1,10 +1,10 @@
-- tools have output
-  - follow up: remove ...
-
-- Use Meyer's diff algorithm and style diff with lipgloss
-
+- read file in beginning with @ should use absolute path
 - chat is too large and collides with border of input
 - no scrolling in chat view
+- add angle |_ to indicate which message the diff belongs to
+- sometimes 2 tools are called and shown in the terminal
+- file is read after file and edit should be in context
+- change write to use something similar to side by side but without green highlighting and with only the new file being written. So essentially just the new file being written with line numbers and borders similar to side by side.
 
 - tools ask for permission (for certain tools)
    - Yes
@@ -12,8 +12,15 @@
 
 - style markdown in chat view
 
+- better error handling for tools
+
 - plan and build modes
   - planning tool
+
+- rename reapo to clai
+
+- ensure file is read before write (ensure)
+- limit file read size to 2000 lines (ensure)
 
 - bash should have a timeout
 

@@ -9,20 +9,20 @@ import (
 func ComputeOptimized(oldContent, newContent string, opts Options) *DiffResult {
 	oldLines := strings.Split(oldContent, "\n")
 	newLines := strings.Split(newContent, "\n")
-	
+
 	// Hash lines for faster comparison
 	oldHashes := hashLines(oldLines)
 	newHashes := hashLines(newLines)
-	
+
 	// Run optimized Myers algorithm
 	script := myersOptimized(oldHashes, newHashes, oldLines, newLines)
-	
+
 	// Convert edit script to changes
 	changes := scriptToChanges(script, oldLines, newLines)
-	
+
 	// Merge consecutive changes
 	changes = mergeChanges(changes)
-	
+
 	return &DiffResult{
 		Changes:    changes,
 		Context:    opts.Context,
@@ -51,7 +51,7 @@ func hashLine(line string) uint64 {
 func myersOptimized(oldHashes, newHashes []uint64, oldLines, newLines []string) []Change {
 	n := len(oldHashes)
 	m := len(newHashes)
-	
+
 	// Handle edge cases
 	if n == 0 {
 		return []Change{{
@@ -71,20 +71,20 @@ func myersOptimized(oldHashes, newHashes []uint64, oldLines, newLines []string) 
 			NewLines: []string{},
 		}}
 	}
-	
+
 	max := n + m
 	v := make(map[int]int)
 	v[1] = 0
-	
+
 	var trace []map[int]int
-	
+
 	for d := 0; d <= max; d++ {
 		vCopy := make(map[int]int)
 		for k, val := range v {
 			vCopy[k] = val
 		}
 		trace = append(trace, vCopy)
-		
+
 		for k := -d; k <= d; k += 2 {
 			var x int
 			if k == -d || (k != d && v[k-1] < v[k+1]) {
@@ -92,52 +92,52 @@ func myersOptimized(oldHashes, newHashes []uint64, oldLines, newLines []string) 
 			} else {
 				x = v[k-1] + 1
 			}
-			
+
 			y := x - k
-			
+
 			// Follow diagonal using hash comparison
 			for x < n && y < m && oldHashes[x] == newHashes[y] {
 				x++
 				y++
 			}
-			
+
 			v[k] = x
-			
+
 			if x >= n && y >= m {
 				return buildPathOptimized(trace, n, m, oldLines, newLines, oldHashes, newHashes)
 			}
 		}
 	}
-	
+
 	return []Change{}
 }
 
 // buildPathOptimized reconstructs the edit path using hashes
 func buildPathOptimized(trace []map[int]int, n, m int, oldLines, newLines []string, oldHashes, newHashes []uint64) []Change {
 	var changes []Change
-	
+
 	// Handle empty trace
 	if len(trace) == 0 {
 		return changes
 	}
-	
+
 	x := n
 	y := m
-	
+
 	for d := len(trace) - 1; d >= 0 && (x > 0 || y > 0); d-- {
 		v := trace[d]
 		k := x - y
-		
+
 		var prevK int
 		if k == -d || (k != d && v[k-1] < v[k+1]) {
 			prevK = k + 1
 		} else {
 			prevK = k - 1
 		}
-		
+
 		prevX := v[prevK]
 		prevY := prevX - prevK
-		
+
 		// Add matching lines
 		for x > prevX && y > prevY && x > 0 && y > 0 {
 			x--
@@ -152,9 +152,9 @@ func buildPathOptimized(trace []map[int]int, n, m int, oldLines, newLines []stri
 				}}, changes...)
 			}
 		}
-		
+
 		// Add insertion or deletion
-		if prevK == k + 1 {
+		if prevK == k+1 {
 			y--
 			if y >= 0 && y < len(newLines) {
 				changes = append([]Change{{
@@ -165,7 +165,7 @@ func buildPathOptimized(trace []map[int]int, n, m int, oldLines, newLines []stri
 					NewLines: []string{newLines[y]},
 				}}, changes...)
 			}
-		} else if prevK == k - 1 {
+		} else if prevK == k-1 {
 			x--
 			if x >= 0 && x < len(oldLines) {
 				changes = append([]Change{{
@@ -177,11 +177,11 @@ func buildPathOptimized(trace []map[int]int, n, m int, oldLines, newLines []stri
 				}}, changes...)
 			}
 		}
-		
+
 		x = prevX
 		y = prevY
 	}
-	
+
 	return changes
 }
 
@@ -189,16 +189,16 @@ func buildPathOptimized(trace []map[int]int, n, m int, oldLines, newLines []stri
 func FindLCS(oldLines, newLines []string) []string {
 	oldHashes := hashLines(oldLines)
 	newHashes := hashLines(newLines)
-	
+
 	n := len(oldLines)
 	m := len(newLines)
-	
+
 	// Dynamic programming table
 	dp := make([][]int, n+1)
 	for i := range dp {
 		dp[i] = make([]int, m+1)
 	}
-	
+
 	// Fill the table
 	for i := 1; i <= n; i++ {
 		for j := 1; j <= m; j++ {
@@ -209,7 +209,7 @@ func FindLCS(oldLines, newLines []string) []string {
 			}
 		}
 	}
-	
+
 	// Reconstruct LCS
 	var lcs []string
 	i, j := n, m
@@ -224,7 +224,7 @@ func FindLCS(oldLines, newLines []string) []string {
 			j--
 		}
 	}
-	
+
 	return lcs
 }
 

@@ -3,7 +3,7 @@ package diff
 import (
 	"fmt"
 	"strings"
-	
+
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -12,15 +12,15 @@ func FormatUnified(result *DiffResult) string {
 	if len(result.Changes) == 0 {
 		return ""
 	}
-	
+
 	var output strings.Builder
 	hunks := groupIntoHunks(result.Changes, result.Context)
-	
+
 	for _, hunk := range hunks {
 		output.WriteString(formatHunk(hunk))
 		output.WriteString("\n")
 	}
-	
+
 	return output.String()
 }
 
@@ -29,15 +29,15 @@ func FormatWithLineNumbers(result *DiffResult) string {
 	if len(result.Changes) == 0 {
 		return ""
 	}
-	
+
 	var output strings.Builder
 	hunks := groupIntoHunks(result.Changes, result.Context)
-	
+
 	for _, hunk := range hunks {
 		// Write hunk header
 		output.WriteString(formatHunkHeader(hunk))
 		output.WriteString("\n")
-		
+
 		// Write changes without line numbers
 		for _, change := range hunk.Changes {
 			switch change.Type {
@@ -56,8 +56,13 @@ func FormatWithLineNumbers(result *DiffResult) string {
 			}
 		}
 	}
-	
+
 	return strings.TrimSuffix(output.String(), "\n")
+}
+
+// FormatSideBySide generates a side-by-side diff with syntax highlighting
+func FormatSideBySide(result *DiffResult, opts SideBySideOptions) string {
+	return FormatSideBySideWithSyntax(result, opts)
 }
 
 // FormatStyledDiff formats diff with lipgloss styling
@@ -65,23 +70,23 @@ func FormatStyledDiff(result *DiffResult) string {
 	if len(result.Changes) == 0 {
 		return ""
 	}
-	
+
 	// Define styles
 	addedStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("2"))   // Green
 	deletedStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("1")) // Red
 	contextStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("8")) // Gray
 	headerStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("6"))  // Cyan
 	lineNumStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("8")) // Gray
-	
+
 	var output strings.Builder
 	hunks := groupIntoHunks(result.Changes, result.Context)
-	
+
 	for _, hunk := range hunks {
 		// Format hunk header
 		header := formatHunkHeader(hunk)
 		output.WriteString(headerStyle.Render(header))
 		output.WriteString("\n")
-		
+
 		// Calculate max line number for padding
 		maxLineNum := 0
 		for _, change := range hunk.Changes {
@@ -90,7 +95,7 @@ func FormatStyledDiff(result *DiffResult) string {
 			}
 		}
 		width := len(fmt.Sprintf("%d", maxLineNum))
-		
+
 		// Format each change
 		for _, change := range hunk.Changes {
 			switch change.Type {
@@ -118,7 +123,7 @@ func FormatStyledDiff(result *DiffResult) string {
 			}
 		}
 	}
-	
+
 	return output.String()
 }
 
@@ -136,13 +141,104 @@ func groupIntoHunks(changes []Change, contextSize int) []Hunk {
 	if len(changes) == 0 {
 		return []Hunk{}
 	}
-	
+
 	var hunks []Hunk
 	var pendingChanges []Change
 	inChangeBlock := false
-	contextBefore := []Change{}
-	contextAfter := []Change{}
-	
+	var contextBeforeLines []Change // Store individual line changes
+	var contextAfterLines []Change  // Store individual line changes
+
+	// Helper to extract last N lines from Equal changes
+	extractLastLines := func(changes []Change, n int) []Change {
+		var result []Change
+		totalLines := 0
+
+		// Count total lines in all changes
+		for _, c := range changes {
+			if c.Type == Equal {
+				totalLines += len(c.OldLines)
+			}
+		}
+
+		// If we have fewer lines than needed, return all
+		if totalLines <= n {
+			return changes
+		}
+
+		// Extract last n lines
+		skip := totalLines - n
+		for _, c := range changes {
+			if c.Type == Equal {
+				if skip >= len(c.OldLines) {
+					skip -= len(c.OldLines)
+					continue
+				}
+
+				// Take lines from this change
+				startIdx := skip
+				if startIdx < 0 {
+					startIdx = 0
+				}
+
+				if startIdx < len(c.OldLines) {
+					newChange := Change{
+						Type:     Equal,
+						OldStart: c.OldStart + startIdx,
+						OldLines: c.OldLines[startIdx:],
+						NewStart: c.NewStart + startIdx,
+						NewLines: c.NewLines[startIdx:],
+					}
+					result = append(result, newChange)
+				}
+				skip = 0
+			}
+		}
+		return result
+	}
+
+	// Helper to extract first N lines from Equal changes
+	extractFirstLines := func(changes []Change, n int) []Change {
+		var result []Change
+		remaining := n
+
+		for _, c := range changes {
+			if remaining <= 0 {
+				break
+			}
+
+			if c.Type == Equal {
+				if len(c.OldLines) <= remaining {
+					// Take entire change
+					result = append(result, c)
+					remaining -= len(c.OldLines)
+				} else {
+					// Take only first 'remaining' lines
+					newChange := Change{
+						Type:     Equal,
+						OldStart: c.OldStart,
+						OldLines: c.OldLines[:remaining],
+						NewStart: c.NewStart,
+						NewLines: c.NewLines[:remaining],
+					}
+					result = append(result, newChange)
+					remaining = 0
+				}
+			}
+		}
+		return result
+	}
+
+	// Helper to count total lines in Equal changes
+	countEqualLines := func(changes []Change) int {
+		count := 0
+		for _, c := range changes {
+			if c.Type == Equal {
+				count += len(c.OldLines)
+			}
+		}
+		return count
+	}
+
 	for i, change := range changes {
 		if change.Type != Equal {
 			// This is an actual change (Insert or Delete)
@@ -150,32 +246,27 @@ func groupIntoHunks(changes []Change, contextSize int) []Hunk {
 				// Starting a new change block
 				inChangeBlock = true
 				// Add up to contextSize lines of context before
-				startIdx := len(contextBefore) - contextSize
-				if startIdx < 0 {
-					startIdx = 0
-				}
-				for j := startIdx; j < len(contextBefore); j++ {
-					pendingChanges = append(pendingChanges, contextBefore[j])
-				}
-				contextBefore = []Change{} // Clear context before
+				contextChanges := extractLastLines(contextBeforeLines, contextSize)
+				pendingChanges = append(pendingChanges, contextChanges...)
+				contextBeforeLines = []Change{} // Clear context before
 			}
 			pendingChanges = append(pendingChanges, change)
-			contextAfter = []Change{} // Reset context after when we see a change
+			contextAfterLines = []Change{} // Reset context after when we see a change
 		} else {
 			// This is an Equal (context) line
 			if inChangeBlock {
 				// We're in a change block, this might be trailing context
-				contextAfter = append(contextAfter, change)
-				
+				contextAfterLines = append(contextAfterLines, change)
+				totalAfterLines := countEqualLines(contextAfterLines)
+
 				// Check if we've collected enough trailing context or reached the end
-				if len(contextAfter) >= contextSize || i == len(changes)-1 {
+				if totalAfterLines >= contextSize || i == len(changes)-1 {
 					// Add the trailing context to pending changes
-					for j := 0; j < contextSize && j < len(contextAfter); j++ {
-						pendingChanges = append(pendingChanges, contextAfter[j])
-					}
-					
+					contextChanges := extractFirstLines(contextAfterLines, contextSize)
+					pendingChanges = append(pendingChanges, contextChanges...)
+
 					// Check if we have more context than needed (potential hunk split)
-					if len(contextAfter) > contextSize*2 {
+					if totalAfterLines > contextSize*2 {
 						// We have enough context to end this hunk
 						// Create the hunk from pending changes
 						if len(pendingChanges) > 0 {
@@ -186,23 +277,46 @@ func groupIntoHunks(changes []Change, contextSize int) []Hunk {
 						pendingChanges = []Change{}
 						inChangeBlock = false
 						// Save remaining context for potential next hunk
-						contextBefore = contextAfter[contextSize:]
-						contextAfter = []Change{}
+						// Skip the first contextSize lines we already used
+						var remainingContext []Change
+						skipped := contextSize
+						for _, c := range contextAfterLines {
+							if c.Type == Equal {
+								if skipped >= len(c.OldLines) {
+									skipped -= len(c.OldLines)
+								} else if skipped > 0 {
+									// Partial skip
+									newChange := Change{
+										Type:     Equal,
+										OldStart: c.OldStart + skipped,
+										OldLines: c.OldLines[skipped:],
+										NewStart: c.NewStart + skipped,
+										NewLines: c.NewLines[skipped:],
+									}
+									remainingContext = append(remainingContext, newChange)
+									skipped = 0
+								} else {
+									remainingContext = append(remainingContext, c)
+								}
+							}
+						}
+						contextBeforeLines = remainingContext
+						contextAfterLines = []Change{}
 					}
 				}
 			} else {
 				// Not in a change block, accumulate as potential leading context
-				contextBefore = append(contextBefore, change)
+				contextBeforeLines = append(contextBeforeLines, change)
 			}
 		}
 	}
-	
+
 	// Process any remaining pending changes
 	if len(pendingChanges) > 0 {
 		hunk := createHunkFromChanges(pendingChanges)
 		hunks = append(hunks, hunk)
 	}
-	
+
 	return hunks
 }
 
@@ -211,13 +325,13 @@ func createHunkFromChanges(changes []Change) Hunk {
 	if len(changes) == 0 {
 		return Hunk{}
 	}
-	
+
 	hunk := Hunk{
 		OldStart: changes[0].OldStart,
 		NewStart: changes[0].NewStart,
 		Changes:  changes,
 	}
-	
+
 	// Calculate counts
 	for _, change := range changes {
 		switch change.Type {
@@ -230,18 +344,18 @@ func createHunkFromChanges(changes []Change) Hunk {
 			hunk.NewCount += len(change.NewLines)
 		}
 	}
-	
+
 	return hunk
 }
 
 // formatHunk formats a single hunk
 func formatHunk(hunk Hunk) string {
 	var output strings.Builder
-	
+
 	// Write hunk header
 	output.WriteString(formatHunkHeader(hunk))
 	output.WriteString("\n")
-	
+
 	// Write changes
 	for _, change := range hunk.Changes {
 		switch change.Type {
@@ -259,18 +373,18 @@ func formatHunk(hunk Hunk) string {
 			}
 		}
 	}
-	
+
 	return output.String()
 }
 
 // formatHunkWithLineNumbers formats a hunk with line numbers
 func formatHunkWithLineNumbers(hunk Hunk) string {
 	var output strings.Builder
-	
+
 	// Write hunk header
 	output.WriteString(formatHunkHeader(hunk))
 	output.WriteString("\n")
-	
+
 	// Calculate max line number for padding
 	maxLineNum := 0
 	for _, change := range hunk.Changes {
@@ -279,7 +393,7 @@ func formatHunkWithLineNumbers(hunk Hunk) string {
 		}
 	}
 	width := len(fmt.Sprintf("%d", maxLineNum))
-	
+
 	// Write changes with line numbers
 	for _, change := range hunk.Changes {
 		switch change.Type {
@@ -299,7 +413,7 @@ func formatHunkWithLineNumbers(hunk Hunk) string {
 			}
 		}
 	}
-	
+
 	return output.String()
 }
 

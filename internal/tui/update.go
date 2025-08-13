@@ -757,7 +757,7 @@ func (m Model) processToolUse(conversation []anthropic.MessageParam, response *a
 		// Format tool invocation message
 		formattedArgs := formatToolArguments(toolUse.Name, toolUse.Input)
 		var content string
-		
+
 		// For edit/write/multiedit, add the diff below the invocation
 		if toolUse.Name == "edit" {
 			var args struct {
@@ -770,11 +770,7 @@ func (m Model) processToolUse(conversation []anthropic.MessageParam, response *a
 				// Generate and indent the diff
 				diff := formatAsGitDiff(args.FilePath, args.OldString, args.NewString)
 				if diff != "" {
-					// Indent each line of the diff
-					lines := strings.Split(diff, "\n")
-					for _, line := range lines {
-						content += "\n   " + line
-					}
+					content += "\n" + diff
 				}
 			}
 		} else if toolUse.Name == "write" {
@@ -787,11 +783,7 @@ func (m Model) processToolUse(conversation []anthropic.MessageParam, response *a
 				// Generate and indent the diff for new file
 				diff := formatWriteContent(args.Content)
 				if diff != "" {
-					// Indent each line of the diff
-					lines := strings.Split(diff, "\n")
-					for _, line := range lines {
-						content += "\n   " + line
-					}
+					content += "\n" + diff
 				}
 			}
 		} else if toolUse.Name == "multiedit" {
@@ -813,10 +805,7 @@ func (m Model) processToolUse(conversation []anthropic.MessageParam, response *a
 					diff := formatAsGitDiff(args.FilePath, edit.OldString, edit.NewString)
 					content += fmt.Sprintf("\n   --- Edit %d ---", i+1)
 					if diff != "" {
-						lines := strings.Split(diff, "\n")
-						for _, line := range lines {
-							content += "\n   " + line
-						}
+						content += "\n" + diff
 					}
 				}
 			}
@@ -824,7 +813,7 @@ func (m Model) processToolUse(conversation []anthropic.MessageParam, response *a
 			// For other tools, use the standard format
 			content = fmt.Sprintf("%s(%s)", toolUse.Name, formattedArgs)
 		}
-		
+
 		startMsg := components.Message{
 			ID:        generateMessageID(),
 			Role:      "assistant",
@@ -876,7 +865,7 @@ func (m Model) executeToolsAndRespond(conversation []anthropic.MessageParam, too
 
 		// Collect results in order
 		toolResults := make([]anthropic.ContentBlockParamUnion, len(toolUses))
-		for i := 0; i < len(toolUses); i++ {
+		for range toolUses {
 			res := <-resultChan
 			toolResults[res.index] = res.result
 		}
@@ -1116,110 +1105,6 @@ func (m Model) executeFileReferences(text string) ([]anthropic.MessageParam, []t
 	return messages, cmds, nil
 }
 
-// expandFileReferences expands @filename references to actual file contents
-func (m Model) expandFileReferences(text string) string {
-	var result strings.Builder
-	runes := []rune(text)
-
-	for i := 0; i < len(runes); i++ {
-		char := runes[i]
-
-		// Check for @ that is not escaped
-		if char == '@' && (i == 0 || runes[i-1] != '\\') {
-			// Find the end of the filename
-			start := i + 1
-			end := start
-
-			// Find word boundary or whitespace (but allow / and . in filenames)
-			for end < len(runes) && !isWhitespace(runes[end]) {
-				end++
-			}
-
-			if end > start {
-				// Extract filename
-				filename := string(runes[start:end])
-
-				// Expand to file contents
-				fileContents := m.readFileOrDirectoryContents(filename)
-				result.WriteString(fileContents)
-
-				// Skip past the filename
-				i = end - 1
-			} else {
-				// No filename after @, just write the @
-				result.WriteRune(char)
-			}
-		} else if char == '\\' && i+1 < len(runes) && runes[i+1] == '@' {
-			// Handle escaped @: \@ becomes @
-			result.WriteRune('@')
-			i++ // Skip the @
-		} else {
-			result.WriteRune(char)
-		}
-	}
-
-	return result.String()
-}
-
-func (m Model) readFileOrDirectoryContents(relativePath string) string {
-	// Get working directory from completion engine via textarea
-	workingDir := "."
-	if completionEngine := m.textarea.CompletionEngine(); completionEngine != nil {
-		workingDir = completionEngine.GetWorkingDir()
-	}
-
-	// Build full path
-	fullPath := filepath.Join(workingDir, relativePath)
-
-	// Check if it's a directory or file
-	info, err := os.Stat(fullPath)
-	if err != nil {
-		return fmt.Sprintf("Error accessing %s: %v", relativePath, err)
-	}
-
-	if info.IsDir() {
-		return m.readDirectoryContents(fullPath, relativePath)
-	} else {
-		return m.readFileContents(fullPath, relativePath)
-	}
-}
-
-func (m Model) readFileContents(fullPath, relativePath string) string {
-	content, err := os.ReadFile(fullPath)
-	if err != nil {
-		return fmt.Sprintf("Error reading file %s: %v", relativePath, err)
-	}
-
-	// Format as a code block with file path
-	return fmt.Sprintf("Contents of %s:\n```\n%s\n```", relativePath, string(content))
-}
-
-func (m Model) readDirectoryContents(fullPath, relativePath string) string {
-	entries, err := os.ReadDir(fullPath)
-	if err != nil {
-		return fmt.Sprintf("Error reading directory %s: %v", relativePath, err)
-	}
-
-	var result strings.Builder
-	result.WriteString(fmt.Sprintf("Contents of directory %s:\n", relativePath))
-
-	for _, entry := range entries {
-		if entry.IsDir() {
-			result.WriteString(fmt.Sprintf("- %s/ (directory)\n", entry.Name()))
-		} else {
-			// Get file info for size
-			info, err := entry.Info()
-			if err == nil {
-				result.WriteString(fmt.Sprintf("- %s (%d bytes)\n", entry.Name(), info.Size()))
-			} else {
-				result.WriteString(fmt.Sprintf("- %s\n", entry.Name()))
-			}
-		}
-	}
-
-	return result.String()
-}
-
 func isWhitespace(r rune) bool {
 	return r == ' ' || r == '\t' || r == '\n' || r == '\r'
 }
@@ -1236,12 +1121,12 @@ func findLineNumber(content string, searchText string) int {
 	if searchText == "" {
 		return 1
 	}
-	
+
 	index := strings.Index(content, searchText)
 	if index == -1 {
 		return -1
 	}
-	
+
 	// Count newlines before the match
 	lineNum := 1
 	for i := 0; i < index; i++ {
@@ -1254,43 +1139,76 @@ func findLineNumber(content string, searchText string) int {
 
 // formatAsGitDiff formats an edit as a git-style unified diff with context
 func formatAsGitDiff(filePath string, oldString, newString string) string {
+	// Always use side-by-side mode by default
+	useSideBySide := true
+
 	// Try to read the file for context
 	fileContent, err := os.ReadFile(filePath)
 	if err != nil {
 		// If we can't read the file, use the new diff package for simple diff
 		result := diff.ComputeSimple(oldString, newString)
+		if useSideBySide {
+			opts := diff.SideBySideOptions{
+				ColumnWidth:     40,
+				ShowLineNumbers: true,
+				WordDiff:        true,
+				ShowFileHeader:  false,
+				FilePath:        filePath,
+			}
+			return diff.FormatSideBySide(result, opts)
+		}
 		return diff.FormatWithLineNumbers(result)
 	}
-	
+
 	content := string(fileContent)
-	
+
 	// Find where the old string appears in the file
 	startLine := findLineNumber(content, oldString)
 	if startLine == -1 {
 		// Old string not found in file, use simple diff
 		result := diff.ComputeSimple(oldString, newString)
+		if useSideBySide {
+			opts := diff.SideBySideOptions{
+				ColumnWidth:     40,
+				ShowLineNumbers: true,
+				WordDiff:        true,
+				ShowFileHeader:  false,
+				FilePath:        filePath,
+			}
+			return diff.FormatSideBySide(result, opts)
+		}
 		return diff.FormatWithLineNumbers(result)
 	}
-	
+
 	// Build a synthetic file content with the change applied for diffing
 	lines := strings.Split(content, "\n")
 	oldLines := strings.Split(oldString, "\n")
-	
+
 	// Create the modified content
 	var modifiedLines []string
 	modifiedLines = append(modifiedLines, lines[:startLine-1]...)
 	modifiedLines = append(modifiedLines, strings.Split(newString, "\n")...)
 	modifiedLines = append(modifiedLines, lines[startLine-1+len(oldLines):]...)
 	modifiedContent := strings.Join(modifiedLines, "\n")
-	
+
 	// Use the optimized diff algorithm
 	opts := diff.Options{
-		Context: 3,
+		Context:          3,
 		IgnoreWhitespace: false,
 	}
 	result := diff.ComputeOptimized(content, modifiedContent, opts)
-	
-	// Format with line numbers
+
+	// Format with line numbers or side-by-side based on configuration
+	if useSideBySide {
+		sideBySideOpts := diff.SideBySideOptions{
+			ColumnWidth:     40,
+			ShowLineNumbers: true,
+			WordDiff:        true,
+			ShowFileHeader:  false,
+			FilePath:        filePath,
+		}
+		return diff.FormatSideBySide(result, sideBySideOpts)
+	}
 	return diff.FormatWithLineNumbers(result)
 }
 
@@ -1305,10 +1223,10 @@ func formatSimpleDiff(oldString, newString string) string {
 func formatWriteContent(content string) string {
 	// Use the new diff package to format as an insertion
 	result := diff.ComputeSimple("", content)
-	
+
 	// Get the formatted output
 	formatted := diff.FormatWithLineNumbers(result)
-	
+
 	// If the content is very long, truncate it
 	lines := strings.Split(content, "\n")
 	if len(lines) > 10 {
@@ -1318,7 +1236,7 @@ func formatWriteContent(content string) string {
 		formatted = diff.FormatWithLineNumbers(truncatedResult)
 		formatted += fmt.Sprintf("\n... (%d more lines)", len(lines)-10)
 	}
-	
+
 	return formatted
 }
 
@@ -1333,7 +1251,7 @@ func formatToolArguments(toolName string, input json.RawMessage) string {
 		if err := json.Unmarshal(input, &args); err == nil && args.FilePath != "" {
 			return args.FilePath
 		}
-		
+
 	case "edit":
 		var args struct {
 			FilePath  string `json:"file_path"`
@@ -1345,7 +1263,7 @@ func formatToolArguments(toolName string, input json.RawMessage) string {
 			// The diff will be handled separately
 			return args.FilePath
 		}
-		
+
 	case "write":
 		var args struct {
 			FilePath string `json:"file_path"`
@@ -1356,7 +1274,7 @@ func formatToolArguments(toolName string, input json.RawMessage) string {
 			// The diff will be handled separately
 			return args.FilePath
 		}
-		
+
 	case "ls":
 		var args struct {
 			Path string `json:"path"`
@@ -1365,7 +1283,7 @@ func formatToolArguments(toolName string, input json.RawMessage) string {
 			return args.Path
 		}
 		return "." // Default to current directory
-		
+
 	case "multiedit":
 		var args struct {
 			FilePath string `json:"file_path"`

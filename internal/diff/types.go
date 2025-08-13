@@ -14,11 +14,11 @@ const (
 
 // Change represents a single change in the diff
 type Change struct {
-	Type      ChangeType
-	OldStart  int      // Starting line in old content (1-based)
-	OldLines  []string // Lines from old content
-	NewStart  int      // Starting line in new content (1-based)
-	NewLines  []string // Lines from new content
+	Type     ChangeType
+	OldStart int      // Starting line in old content (1-based)
+	OldLines []string // Lines from old content
+	NewStart int      // Starting line in new content (1-based)
+	NewLines []string // Lines from new content
 }
 
 // DiffResult contains the complete diff information
@@ -31,18 +31,27 @@ type DiffResult struct {
 
 // Options configures diff behavior
 type Options struct {
-	Context         int  // Number of context lines (default 3)
+	Context          int  // Number of context lines (default 3)
 	IgnoreWhitespace bool // Whether to ignore whitespace changes
-	WordLevel       bool // Enable word-level diffing for changes
+	WordLevel        bool // Enable word-level diffing for changes
 }
 
 // DefaultOptions returns default diff options
 func DefaultOptions() Options {
 	return Options{
-		Context:         3,
+		Context:          3,
 		IgnoreWhitespace: false,
-		WordLevel:       false,
+		WordLevel:        false,
 	}
+}
+
+// SideBySideOptions configures side-by-side diff display
+type SideBySideOptions struct {
+	ColumnWidth     int    // Width of each column
+	ShowLineNumbers bool   // Show line numbers
+	WordDiff        bool   // Enable word-level diff
+	ShowFileHeader  bool   // Show file path header
+	FilePath        string // File path for header
 }
 
 // LineHash represents a hashed line for fast comparison

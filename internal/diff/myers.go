@@ -8,7 +8,7 @@ import (
 func Compute(oldContent, newContent string, opts Options) *DiffResult {
 	oldLines := strings.Split(oldContent, "\n")
 	newLines := strings.Split(newContent, "\n")
-	
+
 	// Handle empty cases
 	if len(oldLines) == 0 && len(newLines) == 0 {
 		return &DiffResult{
@@ -18,16 +18,16 @@ func Compute(oldContent, newContent string, opts Options) *DiffResult {
 			NewContent: newContent,
 		}
 	}
-	
+
 	// Run Myers algorithm to find shortest edit script
 	script := myers(oldLines, newLines)
-	
+
 	// Convert edit script to changes
 	changes := scriptToChanges(script, oldLines, newLines)
-	
+
 	// Merge consecutive changes of the same type
 	changes = mergeChanges(changes)
-	
+
 	return &DiffResult{
 		Changes:    changes,
 		Context:    opts.Context,
@@ -40,7 +40,7 @@ func Compute(oldContent, newContent string, opts Options) *DiffResult {
 func myers(oldLines, newLines []string) []Change {
 	n := len(oldLines)
 	m := len(newLines)
-	
+
 	// Handle edge cases
 	if n == 0 {
 		// All insertions
@@ -62,14 +62,14 @@ func myers(oldLines, newLines []string) []Change {
 			NewLines: []string{},
 		}}
 	}
-	
+
 	// Find longest common subsequence using dynamic programming
 	max := n + m
 	v := make(map[int]int)
 	v[1] = 0
-	
+
 	var trace []map[int]int
-	
+
 	// Forward search
 	for d := 0; d <= max; d++ {
 		vCopy := make(map[int]int)
@@ -77,7 +77,7 @@ func myers(oldLines, newLines []string) []Change {
 			vCopy[k] = val
 		}
 		trace = append(trace, vCopy)
-		
+
 		for k := -d; k <= d; k += 2 {
 			var x int
 			if k == -d || (k != d && v[k-1] < v[k+1]) {
@@ -87,24 +87,24 @@ func myers(oldLines, newLines []string) []Change {
 				// Move right (deletion)
 				x = v[k-1] + 1
 			}
-			
+
 			y := x - k
-			
+
 			// Follow diagonal (matching lines)
 			for x < n && y < m && oldLines[x] == newLines[y] {
 				x++
 				y++
 			}
-			
+
 			v[k] = x
-			
+
 			// Check if we reached the end
 			if x >= n && y >= m {
 				return buildPath(trace, n, m, oldLines, newLines)
 			}
 		}
 	}
-	
+
 	// Shouldn't reach here
 	return []Change{}
 }
@@ -112,29 +112,29 @@ func myers(oldLines, newLines []string) []Change {
 // buildPath reconstructs the edit path from the trace
 func buildPath(trace []map[int]int, n, m int, oldLines, newLines []string) []Change {
 	var changes []Change
-	
+
 	// Handle empty trace
 	if len(trace) == 0 {
 		return changes
 	}
-	
+
 	x := n
 	y := m
-	
+
 	for d := len(trace) - 1; d >= 0 && (x > 0 || y > 0); d-- {
 		v := trace[d]
 		k := x - y
-		
+
 		var prevK int
 		if k == -d || (k != d && v[k-1] < v[k+1]) {
 			prevK = k + 1
 		} else {
 			prevK = k - 1
 		}
-		
+
 		prevX := v[prevK]
 		prevY := prevX - prevK
-		
+
 		// Add matching lines
 		for x > prevX && y > prevY && x > 0 && y > 0 {
 			x--
@@ -149,9 +149,9 @@ func buildPath(trace []map[int]int, n, m int, oldLines, newLines []string) []Cha
 				}}, changes...)
 			}
 		}
-		
+
 		// Add insertion or deletion
-		if prevK == k + 1 {
+		if prevK == k+1 {
 			// Insertion
 			y--
 			if y >= 0 && y < len(newLines) {
@@ -163,7 +163,7 @@ func buildPath(trace []map[int]int, n, m int, oldLines, newLines []string) []Cha
 					NewLines: []string{newLines[y]},
 				}}, changes...)
 			}
-		} else if prevK == k - 1 {
+		} else if prevK == k-1 {
 			// Deletion
 			x--
 			if x >= 0 && x < len(oldLines) {
@@ -176,11 +176,11 @@ func buildPath(trace []map[int]int, n, m int, oldLines, newLines []string) []Cha
 				}}, changes...)
 			}
 		}
-		
+
 		x = prevX
 		y = prevY
 	}
-	
+
 	return changes
 }
 
@@ -204,10 +204,10 @@ func mergeChanges(changes []Change) []Change {
 	if len(changes) <= 1 {
 		return changes
 	}
-	
+
 	var merged []Change
 	current := changes[0]
-	
+
 	for i := 1; i < len(changes); i++ {
 		if changes[i].Type == current.Type &&
 			changes[i].OldStart == current.OldStart+len(current.OldLines) &&
@@ -222,7 +222,7 @@ func mergeChanges(changes []Change) []Change {
 		}
 	}
 	merged = append(merged, current)
-	
+
 	return merged
 }
 
