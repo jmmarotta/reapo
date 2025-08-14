@@ -1,6 +1,7 @@
-- read file in beginning with @ should use absolute path
 - chat is too large and collides with border of input
+  - When the chat grows vertically in size to the max height of where it shold grow it collides with the border on the top of the input box. Can we reduce the height of the chat view by 1?
 - no scrolling in chat view
+  - Why can I not scroll in the chat view? is there a way for me to persist messages in the terminal so that I don't lose them?
 - add angle |_ to indicate which message the diff belongs to
 - sometimes 2 tools are called and shown in the terminal
 - file is read after file and edit should be in context

@@ -1003,21 +1003,21 @@ func (m Model) executeFileReferences(text string) ([]anthropic.MessageParam, []t
 		if err != nil {
 			// Generate error tool result
 			toolID := generateMessageID()
-			errorMsg := fmt.Sprintf("Error accessing %s: %v", ref, err)
+			errorMsg := fmt.Sprintf("Error accessing %s: %v", fullPath, err)
 
 			// Create fake tool use block
-			toolInput := map[string]string{"path": ref}
-			toolUseBlocks = append(toolUseBlocks, anthropic.NewToolUseBlock(toolID, toolInput, "read_file"))
+			toolInput := map[string]string{"path": fullPath}
+			toolUseBlocks = append(toolUseBlocks, anthropic.NewToolUseBlock(toolID, toolInput, "read"))
 			toolResultBlocks = append(toolResultBlocks, anthropic.NewToolResultBlock(toolID, errorMsg, true))
 
 			// Create command to show error message
-			cmd := func(ref string, err error) tea.Cmd {
+			cmd := func(path string, err error) tea.Cmd {
 				return func() tea.Msg {
 					return AddMessageMsg{
 						Message: components.Message{
 							ID:        generateMessageID(),
 							Role:      "assistant",
-							Content:   fmt.Sprintf("read_file(%s) - Error: %v", ref, err),
+							Content:   fmt.Sprintf("read(%s) - Error: %v", path, err),
 							Type:      components.MessageTypeText,
 							Status:    components.MessageError,
 							Timestamp: time.Now(),
@@ -1025,7 +1025,7 @@ func (m Model) executeFileReferences(text string) ([]anthropic.MessageParam, []t
 						},
 					}
 				}
-			}(ref, err)
+			}(fullPath, err)
 			cmds = append(cmds, cmd)
 			continue
 		}
@@ -1034,18 +1034,18 @@ func (m Model) executeFileReferences(text string) ([]anthropic.MessageParam, []t
 
 		if info.IsDir() {
 			// Create tool use block for ls
-			toolInput := map[string]string{"path": ref}
+			toolInput := map[string]string{"path": fullPath}
 			toolInputJSON, _ := json.Marshal(toolInput)
 			toolUseBlocks = append(toolUseBlocks, anthropic.NewToolUseBlock(toolID, toolInput, "ls"))
 
 			// Create command to show tool invocation message
-			cmd := func(ref string) tea.Cmd {
+			cmd := func(path string) tea.Cmd {
 				return func() tea.Msg {
 					return AddMessageMsg{
 						Message: components.Message{
 							ID:        generateMessageID(),
 							Role:      "assistant",
-							Content:   fmt.Sprintf("ls(%s)", ref),
+							Content:   fmt.Sprintf("ls(%s)", path),
 							Type:      components.MessageTypeText,
 							Status:    components.MessageCompleted,
 							Timestamp: time.Now(),
@@ -1053,26 +1053,26 @@ func (m Model) executeFileReferences(text string) ([]anthropic.MessageParam, []t
 						},
 					}
 				}
-			}(ref)
+			}(fullPath)
 			cmds = append(cmds, cmd)
 
 			// Execute ls tool and get result
 			result := m.agent.ExecuteTool(toolID, "ls", toolInputJSON)
 			toolResultBlocks = append(toolResultBlocks, result)
 		} else {
-			// Create tool use block for read_file
-			toolInput := map[string]string{"path": ref}
+			// Create tool use block for read
+			toolInput := map[string]string{"path": fullPath}
 			toolInputJSON, _ := json.Marshal(toolInput)
-			toolUseBlocks = append(toolUseBlocks, anthropic.NewToolUseBlock(toolID, toolInput, "read_file"))
+			toolUseBlocks = append(toolUseBlocks, anthropic.NewToolUseBlock(toolID, toolInput, "read"))
 
 			// Create command to show tool invocation message
-			cmd := func(ref string) tea.Cmd {
+			cmd := func(path string) tea.Cmd {
 				return func() tea.Msg {
 					return AddMessageMsg{
 						Message: components.Message{
 							ID:        generateMessageID(),
 							Role:      "assistant",
-							Content:   fmt.Sprintf("read_file(%s)", ref),
+							Content:   fmt.Sprintf("read(%s)", path),
 							Type:      components.MessageTypeText,
 							Status:    components.MessageCompleted,
 							Timestamp: time.Now(),
@@ -1080,11 +1080,11 @@ func (m Model) executeFileReferences(text string) ([]anthropic.MessageParam, []t
 						},
 					}
 				}
-			}(ref)
+			}(fullPath)
 			cmds = append(cmds, cmd)
 
-			// Execute read_file tool and get result
-			result := m.agent.ExecuteTool(toolID, "read_file", toolInputJSON)
+			// Execute read tool and get result
+			result := m.agent.ExecuteTool(toolID, "read", toolInputJSON)
 			toolResultBlocks = append(toolResultBlocks, result)
 		}
 	}
