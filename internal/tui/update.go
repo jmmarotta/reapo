@@ -17,6 +17,7 @@ import (
 	"reapo/internal/auth"
 	"reapo/internal/diff"
 	"reapo/internal/logger"
+	"reapo/internal/session"
 	"reapo/internal/tui/components"
 	"reapo/internal/tui/components/vimtextarea"
 )
@@ -104,14 +105,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case AddMessageMsg:
-		m.messages = append(m.messages, msg.Message)
+		// Add to UI messages for display
+		m.session.UIMessages = append(m.session.UIMessages, msg.Message)
 		// Create spinner for processing messages
 		if msg.Message.Status == components.MessageProcessing {
 			m.spinners[msg.Message.ID] = components.NewSpinnerComponent("")
 		}
 		// Update context tokens when adding completed messages
 		if msg.Message.Status == components.MessageCompleted {
-			m.contextTokens = m.countConversationTokens()
 
 			// Check if we need auto-compaction
 			if cmd := m.checkAutoCompaction(); cmd != nil {
@@ -123,14 +124,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case MessageUpdateMsg:
 		// Check if this is the final agent response (no existing message to update)
 		messageExists := false
-		for i, message := range m.messages {
+		uiMessages := m.session.GetUIMessages()
+		for i, message := range uiMessages {
 			if message.ID == msg.MessageID {
 				messageExists = true
-				m.messages[i].Content = msg.Content
-				m.messages[i].Status = msg.Status
-				m.messages[i].Progress = msg.Progress
-				m.messages[i].ToolInfo = msg.ToolInfo
-				m.messages[i].UpdatedAt = time.Now()
+				uiMessages[i].Content = msg.Content
+				uiMessages[i].Status = msg.Status
+				uiMessages[i].Progress = msg.Progress
+				uiMessages[i].ToolInfo = msg.ToolInfo
+				uiMessages[i].UpdatedAt = time.Now()
+				m.session.UIMessages = uiMessages
 				break
 			}
 		}
@@ -147,7 +150,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				Timestamp: time.Now(),
 				UpdatedAt: time.Now(),
 			}
-			m.messages = append(m.messages, agentMsg)
+			m.session.UIMessages = append(m.session.UIMessages, agentMsg)
+			
+			// Also add to API Messages for persistence (only if not an error)
+			if msg.Status != components.MessageError {
+				m.session.AppendMessage(anthropic.NewAssistantMessage(
+					anthropic.NewTextBlock(msg.Content),
+				))
+			}
 		}
 
 		// Clean up processing state when complete
@@ -155,8 +165,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.processing = false
 			m.processingText = ""
 			m.processingSpinner = nil
-			// Update context tokens when message is complete
-			m.contextTokens = m.countConversationTokens()
+			// Token count is now managed by session
 
 			// Check if we need auto-compaction
 			if cmd := m.checkAutoCompaction(); cmd != nil {
@@ -181,7 +190,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				Input: msg.Input,
 			},
 		}
-		m.messages = append(m.messages, toolMsg)
+		m.session.UIMessages = append(m.session.UIMessages, toolMsg)
 		m.spinners[msg.MessageID] = components.NewSpinnerComponent("")
 		return m, nil
 
@@ -206,7 +215,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.Error != "" {
 			toolMsg.Status = components.MessageError
 		}
-		m.messages = append(m.messages, toolMsg)
+		m.session.UIMessages = append(m.session.UIMessages, toolMsg)
 		return m, nil
 
 	case ProcessMessageSequenceMsg:
@@ -220,10 +229,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			Timestamp: time.Now(),
 			UpdatedAt: time.Now(),
 		}
-		m.messages = append(m.messages, userMsg)
+		// Add user message to session properly
+		m.session.AddUserMessage(userMsg.Content, userMsg.ID)
 
-		// Update context tokens after adding user message
-		m.contextTokens = m.countConversationTokens()
+		// Token count is now managed by session
 
 		// Check if we need auto-compaction before processing
 		if cmd := m.checkAutoCompaction(); cmd != nil {
@@ -261,7 +270,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case AgentResponseMsg:
 		// Legacy support - convert to new message format
-		m.messages = append(m.messages, components.Message{
+		m.session.UIMessages = append(m.session.UIMessages, components.Message{
 			ID:        generateMessageID(),
 			Role:      "assistant",
 			Content:   msg.Content,
@@ -274,13 +283,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.processing = false
 		m.processingText = ""
 		m.processingSpinner = nil
-		// Update context tokens
-		m.contextTokens = m.countConversationTokens()
+		// Token count is now managed by session
 		return m, nil
 
 	case ProcessToolsMsg:
 		// Handle tool processing by returning the batch command
-		return m, m.processToolUse(msg.Conversation, msg.Response, msg.AgentMessageID)
+		return m, m.processToolUse(msg.Response, msg.AgentMessageID)
 
 	case vimtextarea.SlashCommandMsg:
 		// Handle slash commands
@@ -296,8 +304,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		case "/clear":
 			// Clear conversation history
-			m.messages = []components.Message{}
-			m.contextTokens = 0
+			// Clear the session
+			m.session.Clear()
 			return m, nil
 		case "/editor":
 			// Open external editor
@@ -339,7 +347,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Handle external editor result
 		if msg.Error != nil {
 			// Show error message
-			m.messages = append(m.messages, components.Message{
+			m.session.UIMessages = append(m.session.UIMessages, components.Message{
 				ID:        generateMessageID(),
 				Role:      "system",
 				Content:   fmt.Sprintf("Error opening editor: %s", msg.Error.Error()),
@@ -360,7 +368,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if msg.IsAuto {
 				errorPrefix = "Error during auto-compaction"
 			}
-			m.messages = append(m.messages, components.Message{
+			m.session.UIMessages = append(m.session.UIMessages, components.Message{
 				ID:        generateMessageID(),
 				Role:      "system",
 				Content:   fmt.Sprintf("%s: %s", errorPrefix, msg.Error.Error()),
@@ -384,20 +392,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 
-		// Clear conversation history
-		m.messages = []components.Message{}
-
-		// Add summary as first user message
-		summaryMsg := components.Message{
-			ID:        generateMessageID(),
-			Role:      "user",
-			Content:   msg.Summary,
-			Type:      components.MessageTypeText,
-			Status:    components.MessageCompleted,
-			Timestamp: time.Now(),
-			UpdatedAt: time.Now(),
-		}
-		m.messages = append(m.messages, summaryMsg)
+		// Create a new session from compaction
+		summaryMessageID := generateMessageID()
+		newSession := session.NewSessionFromCompaction(m.session, msg.Summary, summaryMessageID)
+		
+		// Replace the old session with the new one
+		m.session = newSession
 
 		// Add system message about compaction
 		compactionMessage := "Previous conversation was compacted."
@@ -413,10 +413,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			Timestamp: time.Now(),
 			UpdatedAt: time.Now(),
 		}
-		m.messages = append(m.messages, systemMsg)
+		m.session.UIMessages = append(m.session.UIMessages, systemMsg)
 
-		// Reset token count to just the summary
-		m.contextTokens = countTokens(systemPromptContent) + countTokens(msg.Summary)
+		// Token count is managed by session
 
 		// Clear processing state
 		m.processing = false
@@ -425,7 +424,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// Show success statusline for auto-compaction
 		if msg.IsAuto {
-			percentage := float64(m.contextTokens) / float64(m.maxContextTokens) * 100
+			percentage := float64(m.session.GetTokenCount()) / float64(m.maxContextTokens) * 100
 			return m, func() tea.Msg {
 				return ShowStatuslineMsg{
 					Type:     components.StatuslineInfo,
@@ -610,19 +609,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
-// buildConversationHistory converts TUI messages to Claude conversation format
-func (m Model) buildConversationHistory() []anthropic.MessageParam {
-	var conversation []anthropic.MessageParam
-	for _, msg := range m.messages {
-		if msg.Role == "user" && msg.Content != "" {
-			conversation = append(conversation, anthropic.NewUserMessage(anthropic.NewTextBlock(msg.Content)))
-		} else if msg.Role == "assistant" && !msg.IsError && msg.Content != "" && msg.Status == components.MessageCompleted {
-			conversation = append(conversation, anthropic.NewAssistantMessage(anthropic.NewTextBlock(msg.Content)))
-		}
-		// Skip error messages, empty messages, and processing messages from conversation history
-	}
-	return conversation
-}
 
 // processMessage sends a message to the agent with conversation history using new message system
 func (m Model) processMessage(message string) tea.Cmd {
@@ -679,18 +665,15 @@ func (m Model) processAgentRequestCore(originalMessage string, agentMessageID st
 			}
 		}
 
-		// Build conversation history from TUI messages (original display content)
-		conversation := m.buildConversationHistory()
-
 		// Add simulated tool call cycle if any @references were found
-		conversation = append(conversation, fileRefMessages...)
+		m.session.AppendMessages(fileRefMessages)
 
 		// Create context with timeout and cancellation
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cancel()
 
 		// Use the persistent agent with conversation history
-		response, err := m.agent.RunInference(ctx, conversation)
+		response, err := m.agent.RunInference(ctx, m.session.GetMessages())
 		if err != nil {
 			var errMsg string
 			if ctx.Err() == context.DeadlineExceeded {
@@ -716,7 +699,6 @@ func (m Model) processAgentRequestCore(originalMessage string, agentMessageID st
 					// Process tools and create messages
 					// We need to return a message that will trigger the batch command
 					return ProcessToolsMsg{
-						Conversation:   conversation,
 						Response:       response,
 						AgentMessageID: agentMessageID,
 					}
@@ -742,12 +724,12 @@ func (m Model) processAgentRequestCore(originalMessage string, agentMessageID st
 }
 
 // processToolUse handles tool execution and continues the conversation
-func (m Model) processToolUse(conversation []anthropic.MessageParam, response *anthropic.Message, agentMessageID string) tea.Cmd {
+func (m Model) processToolUse(response *anthropic.Message, agentMessageID string) tea.Cmd {
 	// Extract tool information
 	toolUses := extractToolUses(response)
 
-	// Add assistant's response with tool use to conversation
-	conversation = append(conversation, response.ToParam())
+	// Add assistant's response with tool use to session
+	m.session.AppendMessage(response.ToParam())
 
 	// Create batch of commands
 	var cmds []tea.Cmd
@@ -834,7 +816,7 @@ func (m Model) processToolUse(conversation []anthropic.MessageParam, response *a
 	}
 
 	// Then execute tools and update the agent message with the response
-	executeCmd := m.executeToolsAndRespond(conversation, toolUses, agentMessageID)
+	executeCmd := m.executeToolsAndRespond(toolUses, agentMessageID)
 	cmds = append(cmds, executeCmd)
 
 	// Return batch that sends messages immediately then executes tools
@@ -842,7 +824,7 @@ func (m Model) processToolUse(conversation []anthropic.MessageParam, response *a
 }
 
 // executeToolsAndRespond executes tools concurrently and updates the agent message with the final response
-func (m Model) executeToolsAndRespond(conversation []anthropic.MessageParam, toolUses []agent.ToolUseInfo, agentMessageID string) tea.Cmd {
+func (m Model) executeToolsAndRespond(toolUses []agent.ToolUseInfo, agentMessageID string) tea.Cmd {
 	return func() tea.Msg {
 		// Execute tools concurrently
 		type toolResult struct {
@@ -870,15 +852,16 @@ func (m Model) executeToolsAndRespond(conversation []anthropic.MessageParam, too
 			toolResults[res.index] = res.result
 		}
 
-		// Add tool results to conversation
-		conversation = append(conversation, anthropic.NewUserMessage(toolResults...))
+		// Add tool results to session
+		toolResultMsg := anthropic.NewUserMessage(toolResults...)
+		m.session.AppendMessage(toolResultMsg)
 
 		// Create context with timeout for follow-up response
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cancel()
 
 		// Get follow-up response after tool execution
-		followUpResponse, err := m.agent.RunInference(ctx, conversation)
+		followUpResponse, err := m.agent.RunInference(ctx, m.session.GetMessages())
 		if err != nil {
 			var errMsg string
 			if ctx.Err() == context.DeadlineExceeded {
@@ -897,14 +880,19 @@ func (m Model) executeToolsAndRespond(conversation []anthropic.MessageParam, too
 		}
 
 		// Check if follow-up response has more tool uses
+		hasToolUse := false
 		for _, content := range followUpResponse.Content {
 			if content.Type == "tool_use" {
-				// Return a message that will trigger more tool processing
-				return ProcessToolsMsg{
-					Conversation:   conversation,
-					Response:       followUpResponse,
-					AgentMessageID: agentMessageID,
-				}
+				hasToolUse = true
+				break
+			}
+		}
+		
+		if hasToolUse {
+			// Return a message that will trigger more tool processing
+			return ProcessToolsMsg{
+				Response:       followUpResponse,
+				AgentMessageID: agentMessageID,
 			}
 		}
 
@@ -915,6 +903,9 @@ func (m Model) executeToolsAndRespond(conversation []anthropic.MessageParam, too
 				responseText.WriteString(content.Text)
 			}
 		}
+
+		// Add the follow-up response to session's Messages for persistence
+		m.session.AppendMessage(followUpResponse.ToParam())
 
 		// Update the agent message with the final response
 		return MessageUpdateMsg{
@@ -1416,14 +1407,14 @@ func (m Model) shouldAutoCompact() bool {
 	}
 
 	// Check if we're at or above 95% capacity
-	percentage := float64(m.contextTokens) / float64(m.maxContextTokens)
+	percentage := float64(m.session.GetTokenCount()) / float64(m.maxContextTokens)
 	return percentage >= 0.95
 }
 
 // checkAutoCompaction returns a command if auto-compaction should be triggered
 func (m Model) checkAutoCompaction() tea.Cmd {
 	// First check for 90% warning
-	percentage := float64(m.contextTokens) / float64(m.maxContextTokens)
+	percentage := float64(m.session.GetTokenCount()) / float64(m.maxContextTokens)
 	if percentage >= 0.90 && percentage < 0.95 && !m.processing {
 		// Show warning but don't compact yet
 		return func() tea.Msg {
@@ -1453,8 +1444,8 @@ func (m Model) checkAutoCompaction() tea.Cmd {
 // compactConversation summarizes the current conversation and clears history
 func (m Model) compactConversation(isAuto bool) tea.Cmd {
 	return func() tea.Msg {
-		// Build conversation history for summarization
-		conversation := m.buildConversationHistory()
+		// Get conversation history from session for summarization
+		conversation := m.session.GetMessages()
 
 		// If no conversation to compact, return early
 		if len(conversation) == 0 {
@@ -1521,23 +1512,6 @@ func countTokens(text string) int {
 
 // countConversationTokens counts the total tokens in the conversation history
 func (m Model) countConversationTokens() int {
-	tokens := 0
-
-	// Count system prompt tokens (from systemPromptContent)
-	tokens += countTokens(systemPromptContent)
-
-	// Count message tokens
-	for _, msg := range m.messages {
-		if msg.Role == "user" || msg.Role == "assistant" {
-			tokens += countTokens(msg.Content)
-
-			// Count tool invocation/result tokens
-			if msg.ToolInfo != nil {
-				tokens += countTokens(msg.ToolInfo.Input)
-				tokens += countTokens(msg.ToolInfo.Output)
-			}
-		}
-	}
-
-	return tokens
+	// Token counting is now managed by the session
+	return m.session.GetTokenCount()
 }

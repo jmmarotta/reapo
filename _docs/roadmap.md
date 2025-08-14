@@ -1,24 +1,27 @@
-- create session abstraction
-  - the json being sent to anthropic is built from the UI messages. We need to store both the UI messages and the json being sent to anthropic.
-
-- make sure conversation is changed to use session abstraction
-
-- compaction should create a new session
-
 - chat is too large and collides with border of input
   - When the chat grows vertically in size to the max height of where it shold grow it collides with the border on the top of the input box. Can we reduce the height of the chat view by 1?
 
 - no scrolling in chat view
-  - Why can I not scroll in the chat view? is there a way for me to persist messages in the terminal so that I don't lose them?
+  - Why can I not scroll in the chat views UIMessages? is there a way for me to persist messages in the terminal so that I don't lose them?
 
 - change write to use something similar to side by side but without green highlighting and with only the new file being written. So essentially just the new file being written with line numbers and borders similar to side by side.
 
 - tools ask for permission (for certain tools)
    - Yes
    - No, and specify what to do
+I want certain tools to ask the user for permission before executing. For example, if the user edits a file, I want the user to be prompted to confirm that they want to edit the file before the edit is made.
+
+Two options should be shown to the user: "Yes" and "No, and give feedback".
+
+Come up with a plan to implement this for the tools that could write, overwite, edit, or delete files.
 
 - add angle |_ to indicate which message the diff belongs to
   - Help me come up with a plan to better abstract the messages I want
+
+- write tests for main parts of agent
+  - agent
+  - tools
+  - session
 
 - style markdown in chat view
 
@@ -102,3 +105,5 @@
 - refactor tui/update.go
 
 - refactor agent and include update stuff
+
+- which-key style help

@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"reapo/internal/agent"
 	"reapo/internal/config"
+	"reapo/internal/session"
 	"reapo/internal/tools"
 	"reapo/internal/tui/completion"
 	"reapo/internal/tui/components"
@@ -18,7 +19,7 @@ import (
 
 // Model represents the Bubble Tea model for the TUI
 type Model struct {
-	messages []components.Message
+	session  *session.Session // Manages dual message storage
 	textarea vimtextarea.Model
 	viewport struct {
 		width  int
@@ -31,7 +32,6 @@ type Model struct {
 	processing        bool
 	processingText    string // Text to show during processing
 	processingSpinner *components.SpinnerComponent
-	contextTokens     int                                     // Current context window usage in tokens
 	maxContextTokens  int                                     // Maximum context window size (200k for both models)
 	currentModel      string                                  // Current model being used
 	spinners          map[string]*components.SpinnerComponent // Track spinners by message ID
@@ -99,7 +99,6 @@ type AgentStatusMsg struct {
 
 // ProcessToolsMsg triggers processing of tool uses
 type ProcessToolsMsg struct {
-	Conversation   []anthropic.MessageParam
 	Response       *anthropic.Message
 	AgentMessageID string
 }
@@ -161,16 +160,16 @@ func NewModel(client anthropic.Client, toolDefs []tools.ToolDefinition) Model {
 
 	chatAgent := agent.NewAgent(&client, nil, toolDefs, systemPromptContent)
 
-	// Calculate initial token count from system prompt
-	initialTokens := len(systemPromptContent) / 4 // Standard approximation: 1 token ≈ 4 characters
+	// Initialize session
+	sess := session.NewSession()
+	sess.MaxTokens = config.GetContextTokens()
 
 	model := Model{
-		messages:         []components.Message{},
+		session:          sess,
 		textarea:         ta,
 		agent:            chatAgent,
 		client:           client,
 		toolDefs:         toolDefs,
-		contextTokens:    initialTokens,
 		maxContextTokens: config.GetContextTokens(),
 		currentModel:     config.GetModelName(),
 		spinners:         make(map[string]*components.SpinnerComponent),

@@ -36,7 +36,7 @@ func (m Model) View() string {
 	chatHeight := m.viewport.height - textareaHeight - completionHeight - processingHeight - 5
 
 	// Create and render components
-	chatComponent := components.NewChatComponent(m.messages, chatHeight, m.viewport.width)
+	chatComponent := components.NewChatComponent(m.session.GetUIMessages(), chatHeight, m.viewport.width)
 	chat := chatComponent.RenderWithSpinners(m.spinners)
 
 	// Render processing indicator if active
@@ -55,7 +55,7 @@ func (m Model) View() string {
 	input := inputComponent.Render()
 
 	footerComponent := components.NewFooterComponent(m.textarea.Mode(), m.viewport.width)
-	footerComponent.UpdateContextInfo(m.contextTokens, m.maxContextTokens, m.currentModel)
+	footerComponent.UpdateContextInfo(m.session.GetTokenCount(), m.maxContextTokens, m.currentModel)
 	footer := footerComponent.Render()
 
 	// Render statusline
