@@ -62,11 +62,150 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 
 	case tea.KeyMsg:
-		// Handle status modal key events first
+		// Handle conversation view mode first
+		if m.conversationViewMode && m.conversationView != nil {
+			// Check for gg command
+			if m.lastKeyWasG && msg.String() == "g" {
+				m.conversationView.MoveToFirstLine()
+				m.lastKeyWasG = false
+				return m, nil
+			}
+			m.lastKeyWasG = false // Reset if not gg
+
+			// Route key events to conversation view
+			switch msg.String() {
+			case "q", "esc":
+				// Exit conversation view mode
+				m.conversationViewMode = false
+				m.conversationView = nil
+				return m, nil
+			case "j":
+				m.conversationView.MoveDown(1)
+			case "k":
+				m.conversationView.MoveUp(1)
+			case "h":
+				m.conversationView.MoveLeft(1)
+			case "l":
+				m.conversationView.MoveRight(1)
+			case "g":
+				// First 'g', wait for second
+				m.lastKeyWasG = true
+				return m, nil
+			case "G":
+				m.conversationView.MoveToLastLine()
+			case "w":
+				m.conversationView.MoveWordForward()
+			case "W":
+				m.conversationView.MoveBigWordForward()
+			case "b":
+				m.conversationView.MoveWordBackward()
+			case "B":
+				m.conversationView.MoveBigWordBackward()
+			case "e":
+				m.conversationView.MoveWordEnd()
+			case "E":
+				m.conversationView.MoveBigWordEnd()
+			case "{":
+				m.conversationView.MoveToPreviousParagraph()
+			case "}":
+				m.conversationView.MoveToNextParagraph()
+			case "H":
+				m.conversationView.MoveToViewportTop()
+			case "M":
+				m.conversationView.MoveToViewportMiddle()
+			case "L":
+				m.conversationView.MoveToViewportBottom()
+			case "ctrl+d":
+				m.conversationView.HalfPageDown()
+			case "ctrl+u":
+				m.conversationView.HalfPageUp()
+			case "ctrl+f":
+				m.conversationView.PageDown()
+			case "ctrl+b":
+				m.conversationView.PageUp()
+			case "ctrl+e":
+				m.conversationView.ScrollDown()
+			case "ctrl+y":
+				m.conversationView.ScrollUp()
+			case "0":
+				m.conversationView.MoveToLineStart()
+			case "$":
+				m.conversationView.MoveToLineEnd()
+			case "^", "_":
+				m.conversationView.MoveToFirstNonBlank()
+			case "v":
+				if m.conversationView.SelectionMode == components.SelectionNone {
+					m.conversationView.StartCharSelection()
+				} else {
+					m.conversationView.CancelSelection()
+				}
+			case "V":
+				if m.conversationView.SelectionMode == components.SelectionNone {
+					m.conversationView.StartLineSelection()
+				} else {
+					m.conversationView.CancelSelection()
+				}
+			case "ctrl+v":
+				if m.conversationView.SelectionMode == components.SelectionNone {
+					m.conversationView.StartBlockSelection()
+				} else {
+					m.conversationView.CancelSelection()
+				}
+			case "y":
+				m.conversationView.YankSelection()
+			case "Y":
+				m.conversationView.YankLine()
+			case " ":
+				// Space starts selection (like tmux)
+				if m.conversationView.SelectionMode == components.SelectionNone {
+					m.conversationView.StartCharSelection()
+				}
+			case "enter":
+				// Copy and exit
+				m.conversationView.YankSelection()
+				m.conversationViewMode = false
+				m.conversationView = nil
+				return m, nil
+			}
+			
+			// Update selection if in selection mode
+			if m.conversationView.SelectionMode != components.SelectionNone {
+				m.conversationView.UpdateSelection()
+			}
+			
+			return m, nil
+		}
+
+		// Handle status modal key events
 		if m.statusModal.IsVisible() {
 			statusModal, cmd := m.statusModal.Update(msg)
 			m.statusModal = &statusModal
 			return m, cmd
+		}
+
+		// Check for leader key combinations ONLY in Normal mode
+		if m.textarea.Mode() == vimtextarea.Normal {
+			if m.lastKeyWasLeader {
+				m.lastKeyWasLeader = false
+				switch msg.String() {
+				case "c":
+					// Enter conversation view mode
+					m.conversationViewMode = true
+					m.conversationView = components.NewConversationView(
+						m.session.GetUIMessages(),
+						m.viewport.width,
+						m.viewport.height,
+					)
+					return m, nil
+				}
+				// If not a recognized leader command, continue processing
+			}
+
+			// Check if this is the leader key (only in Normal mode)
+			if msg.String() == m.leaderKey {
+				m.lastKeyWasLeader = true
+				return m, nil
+			}
 		}
 
 		// Handle key events before passing to textarea

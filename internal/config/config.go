@@ -11,7 +11,8 @@ import (
 
 // ConfigFile represents the JSON configuration file structure
 type ConfigFile struct {
-	Model string `json:"model,omitempty"`
+	Model     string `json:"model,omitempty"`
+	LeaderKey string `json:"leader_key,omitempty"`
 }
 
 // Config holds the application configuration
@@ -20,6 +21,7 @@ type Config struct {
 	ModelName     string
 	MaxTokens     int
 	ContextTokens int
+	LeaderKey     string
 }
 
 // Global config instance
@@ -57,14 +59,20 @@ func Init() {
 		ModelName:     "claude-sonnet-4",
 		MaxTokens:     64000,
 		ContextTokens: 200000,
+		LeaderKey:     "<space>",
 	}
 
 	// Try to load from config file
-	modelName := loadConfigFile()
+	modelName, leaderKey := loadConfigFile()
 
 	// Check environment variable if no config file setting
 	if modelName == "" {
 		modelName = os.Getenv("REAPO_MODEL")
+	}
+
+	// Apply leader key if specified
+	if leaderKey != "" {
+		AppConfig.LeaderKey = leaderKey
 	}
 
 	// If a model is specified, update the config
@@ -85,24 +93,24 @@ func Init() {
 }
 
 // loadConfigFile loads the configuration from ~/.config/reapo/config.json
-func loadConfigFile() string {
+func loadConfigFile() (string, string) {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
-		return ""
+		return "", ""
 	}
 
 	configPath := filepath.Join(homeDir, ".config", "reapo", "config.json")
 	data, err := os.ReadFile(configPath)
 	if err != nil {
-		return ""
+		return "", ""
 	}
 
 	var configFile ConfigFile
 	if err := json.Unmarshal(data, &configFile); err != nil {
-		return ""
+		return "", ""
 	}
 
-	return configFile.Model
+	return configFile.Model, configFile.LeaderKey
 }
 
 // GetModel returns the configured model
@@ -135,4 +143,26 @@ func GetMaxTokens() int {
 		Init()
 	}
 	return AppConfig.MaxTokens
+}
+
+// GetLeaderKey returns the configured leader key
+func GetLeaderKey() string {
+	if AppConfig == nil {
+		Init()
+	}
+	return parseLeaderKey(AppConfig.LeaderKey)
+}
+
+// parseLeaderKey converts special key representations to actual characters
+func parseLeaderKey(key string) string {
+	switch key {
+	case "<space>":
+		return " "
+	case "<tab>":
+		return "\t"
+	case "<cr>", "<enter>":
+		return "\r"
+	default:
+		return key
+	}
 }

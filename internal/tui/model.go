@@ -41,6 +41,12 @@ type Model struct {
 	// Auth state
 	authVerifier string // OAuth verifier for code exchange
 	authModal    components.AuthModal
+	// Conversation view state
+	conversationViewMode bool                         // Whether conversation view is active
+	conversationView     *components.ConversationView // The conversation view component
+	leaderKey           string                       // The configured leader key
+	lastKeyWasLeader    bool                         // Track if last key was leader
+	lastKeyWasG         bool                         // Track if last key was 'g' for gg command
 }
 
 // AgentResponseMsg represents a message from the agent
@@ -165,18 +171,23 @@ func NewModel(client anthropic.Client, toolDefs []tools.ToolDefinition) Model {
 	sess.MaxTokens = config.GetContextTokens()
 
 	model := Model{
-		session:          sess,
-		textarea:         ta,
-		agent:            chatAgent,
-		client:           client,
-		toolDefs:         toolDefs,
-		maxContextTokens: config.GetContextTokens(),
-		currentModel:     config.GetModelName(),
-		spinners:         make(map[string]*components.SpinnerComponent),
-		helpModal:        components.NewHelpModal(),
-		statusModal:      components.NewStatusModal(),
-		statusline:       components.NewStatuslineComponent(0), // Width will be set on WindowSizeMsg
-		authModal:        components.NewAuthModal(),
+		session:              sess,
+		textarea:             ta,
+		agent:                chatAgent,
+		client:               client,
+		toolDefs:             toolDefs,
+		maxContextTokens:     config.GetContextTokens(),
+		currentModel:         config.GetModelName(),
+		spinners:             make(map[string]*components.SpinnerComponent),
+		helpModal:            components.NewHelpModal(),
+		statusModal:          components.NewStatusModal(),
+		statusline:           components.NewStatuslineComponent(0), // Width will be set on WindowSizeMsg
+		authModal:            components.NewAuthModal(),
+		leaderKey:            config.GetLeaderKey(),
+		conversationViewMode: false,
+		conversationView:     nil,
+		lastKeyWasLeader:     false,
+		lastKeyWasG:          false,
 	}
 
 	return model

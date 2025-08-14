@@ -10,6 +10,11 @@ func (m Model) View() string {
 		return "Loading..."
 	}
 
+	// Render conversation view if active (overlay)
+	if m.conversationViewMode && m.conversationView != nil {
+		return m.conversationView.Render()
+	}
+
 	// Get completion state
 	completionState := m.textarea.CompletionState()
 

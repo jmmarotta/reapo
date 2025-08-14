@@ -1,6 +1,8 @@
 - chat is too large and collides with border of input
   - When the chat grows vertically in size to the max height of where it shold grow it collides with the border on the top of the input box. Can we reduce the height of the chat view by 1?
 
+- claude 4 sonnet is 1 million tokens now
+
 - no scrolling in chat view
   - Why can I not scroll in the chat views UIMessages? is there a way for me to persist messages in the terminal so that I don't lose them?
 
