@@ -1,22 +1,31 @@
+- create session abstraction
+  - the json being sent to anthropic is built from the UI messages. We need to store both the UI messages and the json being sent to anthropic.
+
+- make sure conversation is changed to use session abstraction
+
+- compaction should create a new session
+
 - chat is too large and collides with border of input
   - When the chat grows vertically in size to the max height of where it shold grow it collides with the border on the top of the input box. Can we reduce the height of the chat view by 1?
+
 - no scrolling in chat view
   - Why can I not scroll in the chat view? is there a way for me to persist messages in the terminal so that I don't lose them?
-- add angle |_ to indicate which message the diff belongs to
-- sometimes 2 tools are called and shown in the terminal
-- file is read after file and edit should be in context
+
 - change write to use something similar to side by side but without green highlighting and with only the new file being written. So essentially just the new file being written with line numbers and borders similar to side by side.
 
 - tools ask for permission (for certain tools)
    - Yes
    - No, and specify what to do
 
+- add angle |_ to indicate which message the diff belongs to
+  - Help me come up with a plan to better abstract the messages I want
+
 - style markdown in chat view
 
 - better error handling for tools
 
 - plan and build modes
-  - planning tool
+  - planning tool?
 
 - rename reapo to clai
 
