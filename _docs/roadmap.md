@@ -1,10 +1,7 @@
-- chat is too large and collides with border of input
-  - When the chat grows vertically in size to the max height of where it shold grow it collides with the border on the top of the input box. Can we reduce the height of the chat view by 1?
-
 - claude 4 sonnet is 1 million tokens now
 
 - no scrolling in chat view
-  - Why can I not scroll in the chat views UIMessages? is there a way for me to persist messages in the terminal so that I don't lose them?
+  - mouse scroll for ui messages by default Why can I not scroll in the chat views UIMessages? is there a way for me to persist messages in the terminal so that I don't lose them?
 
 - change write to use something similar to side by side but without green highlighting and with only the new file being written. So essentially just the new file being written with line numbers and borders similar to side by side.
 
@@ -19,6 +16,8 @@ Come up with a plan to implement this for the tools that could write, overwite, 
 
 - add angle |_ to indicate which message the diff belongs to
   - Help me come up with a plan to better abstract the messages I want
+
+- there is too much happening in update.go
 
 - write tests for main parts of agent
   - agent

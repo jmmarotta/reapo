@@ -1136,7 +1136,7 @@ func (m Model) executeFileReferences(text string) ([]anthropic.MessageParam, []t
 			errorMsg := fmt.Sprintf("Error accessing %s: %v", fullPath, err)
 
 			// Create fake tool use block
-			toolInput := map[string]string{"path": fullPath}
+			toolInput := map[string]string{"file_path": fullPath}
 			toolUseBlocks = append(toolUseBlocks, anthropic.NewToolUseBlock(toolID, toolInput, "read"))
 			toolResultBlocks = append(toolResultBlocks, anthropic.NewToolResultBlock(toolID, errorMsg, true))
 
@@ -1191,7 +1191,7 @@ func (m Model) executeFileReferences(text string) ([]anthropic.MessageParam, []t
 			toolResultBlocks = append(toolResultBlocks, result)
 		} else {
 			// Create tool use block for read
-			toolInput := map[string]string{"path": fullPath}
+			toolInput := map[string]string{"file_path": fullPath}
 			toolInputJSON, _ := json.Marshal(toolInput)
 			toolUseBlocks = append(toolUseBlocks, anthropic.NewToolUseBlock(toolID, toolInput, "read"))
 
