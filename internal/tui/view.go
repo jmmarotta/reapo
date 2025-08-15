@@ -36,9 +36,9 @@ func (m Model) View() string {
 		processingHeight = 2 // 1 line for content + 1 for spacing
 	}
 
-	// Calculate heights: total - textarea height - completion height - processing height - border (2 lines) - footer line - statusline - spacing
+	// Calculate heights: total - textarea height - completion height - processing height - border (2 lines) - footer line - statusline - spacing (2 lines)
 	textareaHeight := m.textarea.Height()
-	chatHeight := m.viewport.height - textareaHeight - completionHeight - processingHeight - 5
+	chatHeight := m.viewport.height - textareaHeight - completionHeight - processingHeight - 6
 
 	// Create and render components
 	chatComponent := components.NewChatComponent(m.session.GetUIMessages(), chatHeight, m.viewport.width)
