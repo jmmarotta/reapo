@@ -37,7 +37,7 @@ var ModelMapping = map[string]anthropic.Model{
 
 // ModelContextLimits defines the context window size for each model (in tokens)
 var ModelContextLimits = map[string]int{
-	"claude-sonnet-4":  200000,
+	"claude-sonnet-4":  1000000,
 	"claude-opus-4":    200000,
 	"claude-opus-4-1":  200000,
 	"claude-3-5-haiku": 200000,
@@ -58,7 +58,7 @@ func Init() {
 		Model:         anthropic.ModelClaude4Sonnet20250514,
 		ModelName:     "claude-sonnet-4",
 		MaxTokens:     64000,
-		ContextTokens: 200000,
+		ContextTokens: 1000000,
 		LeaderKey:     "<space>",
 	}
 

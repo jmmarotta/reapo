@@ -1,5 +1,3 @@
-- claude 4 sonnet is 1 million tokens now
-
 - no scrolling in chat view
   - mouse scroll for ui messages by default Why can I not scroll in the chat views UIMessages? is there a way for me to persist messages in the terminal so that I don't lose them?
 
