@@ -326,3 +326,88 @@ func padToWidth(s string, width int) string {
 	}
 	return s + strings.Repeat(" ", width-plainLen)
 }
+
+// FormatNewFileContent formats new file content with line numbers and borders
+// Similar to side-by-side view but shows only the new content without highlighting
+func FormatNewFileContent(content string, filePath string, columnWidth int) string {
+	if content == "" {
+		return ""
+	}
+
+	// Set default column width if not specified
+	if columnWidth == 0 {
+		columnWidth = 80
+	}
+
+	var output strings.Builder
+
+	// Add top border
+	output.WriteString(formatNewFileTopBorder(columnWidth))
+	output.WriteString("\n")
+
+	// Split content into lines
+	lines := strings.Split(content, "\n")
+	
+	// Format each line with line numbers, handling wrapping
+	for i, line := range lines {
+		lineNum := i + 1
+		formattedLines := formatNewFileLine(lineNum, line, columnWidth)
+		for _, formattedLine := range formattedLines {
+			output.WriteString(formattedLine)
+			output.WriteString("\n")
+		}
+	}
+
+	// Add bottom border
+	output.WriteString(formatNewFileBottomBorder(columnWidth))
+
+	return output.String()
+}
+
+// formatNewFileTopBorder creates a simple top border for new file display
+func formatNewFileTopBorder(columnWidth int) string {
+	borderStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("7")) // Light gray
+	border := strings.Repeat("─", columnWidth+6)
+	return borderStyle.Render("╭" + border + "╮")
+}
+
+// formatNewFileBottomBorder creates the bottom border for new file display
+func formatNewFileBottomBorder(columnWidth int) string {
+	borderStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("7")) // Light gray
+	border := strings.Repeat("─", columnWidth+6)
+	return borderStyle.Render("╰" + border + "╯")
+}
+
+// formatNewFileLine formats a single line with line number for new file display
+// Returns multiple lines if content needs to be wrapped
+func formatNewFileLine(lineNum int, content string, columnWidth int) []string {
+	borderStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("7")) // Light gray
+	lineNumStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("7")) // Light gray for line numbers
+	
+	// Calculate available width for content (accounting for line number)
+	contentWidth := columnWidth
+	
+	// Wrap the content to fit the column width
+	wrappedLines := wrapString(content, contentWidth)
+	var result []string
+	
+	for i, line := range wrappedLines {
+		var formattedContent string
+		if i == 0 {
+			// First line shows the line number
+			lineNumStr := fmt.Sprintf("%4d  ", lineNum)
+			formattedContent = lineNumStyle.Render(lineNumStr) + line
+		} else {
+			// Continuation lines have no line number
+			formattedContent = "      " + line
+		}
+		
+		// Pad content to fill the column
+		paddedContent := padToWidth(formattedContent, columnWidth+6)
+		
+		// Add line with borders
+		result = append(result, borderStyle.Render("│") + paddedContent + borderStyle.Render("│"))
+	}
+	
+	return result
+}

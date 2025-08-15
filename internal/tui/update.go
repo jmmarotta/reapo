@@ -901,10 +901,10 @@ func (m Model) processToolUse(response *anthropic.Message, agentMessageID string
 			}
 			content = fmt.Sprintf("%s(%s)", toolUse.Name, formattedArgs)
 			if err := json.Unmarshal(toolUse.Input, &args); err == nil {
-				// Generate and indent the diff for new file
-				diff := formatWriteContent(args.Content)
-				if diff != "" {
-					content += "\n" + diff
+				// Format the new file content with borders and line numbers
+				formatted := formatWriteContent(args.Content, args.FilePath)
+				if formatted != "" {
+					content += "\n" + formatted
 				}
 			}
 		} else if toolUse.Name == "multiedit" {
@@ -1349,25 +1349,10 @@ func formatSimpleDiff(oldString, newString string) string {
 	return diff.FormatWithLineNumbers(result)
 }
 
-// formatWriteContent formats write content as a new file diff
-func formatWriteContent(content string) string {
-	// Use the new diff package to format as an insertion
-	result := diff.ComputeSimple("", content)
-
-	// Get the formatted output
-	formatted := diff.FormatWithLineNumbers(result)
-
-	// If the content is very long, truncate it
-	lines := strings.Split(content, "\n")
-	if len(lines) > 10 {
-		// Re-compute with just first 10 lines
-		truncatedContent := strings.Join(lines[:10], "\n")
-		truncatedResult := diff.ComputeSimple("", truncatedContent)
-		formatted = diff.FormatWithLineNumbers(truncatedResult)
-		formatted += fmt.Sprintf("\n... (%d more lines)", len(lines)-10)
-	}
-
-	return formatted
+// formatWriteContent formats write content with borders and line numbers
+func formatWriteContent(content string, filePath string) string {
+	// Use the new formatter for displaying file content - show all lines
+	return diff.FormatNewFileContent(content, filePath, 60)
 }
 
 // formatToolArguments formats tool arguments for display

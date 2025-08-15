@@ -1,21 +1,28 @@
-- no scrolling in chat view
-  - mouse scroll for ui messages by default Why can I not scroll in the chat views UIMessages? is there a way for me to persist messages in the terminal so that I don't lose them?
-
-- change write to use something similar to side by side but without green highlighting and with only the new file being written. So essentially just the new file being written with line numbers and borders similar to side by side.
-
 - tools ask for permission (for certain tools)
    - Yes
    - No, and specify what to do
+```
 I want certain tools to ask the user for permission before executing. For example, if the user edits a file, I want the user to be prompted to confirm that they want to edit the file before the edit is made.
 
 Two options should be shown to the user: "Yes" and "No, and give feedback".
 
 Come up with a plan to implement this for the tools that could write, overwite, edit, or delete files.
+```
+
+- rename reapo to clai
+
+- make sure token counts are correct and include system prompt I think it's divided 10 and base is 1M if necessary or 200k
+
+- no scrolling in chat view
+  - mouse scroll for ui messages by default Why can I not scroll in the chat views UIMessages? is there a way for me to persist messages in the terminal so that I don't lose them?
 
 - add angle |_ to indicate which message the diff belongs to
   - Help me come up with a plan to better abstract the messages I want
 
 - there is too much happening in update.go
+
+- plan and build modes
+  - planning tool?
 
 - write tests for main parts of agent
   - agent
@@ -26,19 +33,14 @@ Come up with a plan to implement this for the tools that could write, overwite, 
 
 - better error handling for tools
 
-- plan and build modes
-  - planning tool?
-
-- rename reapo to clai
-
 - ensure file is read before write (ensure)
 - limit file read size to 2000 lines (ensure)
-
-- bash should have a timeout
 
 - adjust prompts according to the lastest claude code version
   - https://cchistory.mariozechner.at/
   - https://mariozechner.at/posts/2025-08-03-cchistory/?utm_source=tldrai
+
+- bash should have a timeout
 
 - certain tools always need permission
   - set in config
@@ -62,7 +64,7 @@ Come up with a plan to implement this for the tools that could write, overwite, 
 
 - recover from errors in request (retry)
 
-- Cerebras / OpenAPI provider
+- OpenAPI provider
 
 - Improve in progress request (padding and color)
   - time taken
