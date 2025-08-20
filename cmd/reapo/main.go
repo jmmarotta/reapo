@@ -3,7 +3,6 @@ package main
 import (
 	"bufio"
 	"context"
-	_ "embed"
 	"fmt"
 	"log"
 	"os"
@@ -18,9 +17,6 @@ import (
 	"reapo/internal/tools"
 	"reapo/internal/tui"
 )
-
-//go:embed system_prompt.txt
-var systemPrompt string
 
 func main() {
 	// Initialize configuration
@@ -37,25 +33,27 @@ func main() {
 	client, err := auth.NewClient()
 	if err != nil {
 		// Log warning but continue - some commands like /login should work without auth
-		logger.Debug("No authentication available: %v", err)
-		// Create a default client that might work with env vars
-		client = anthropic.NewClient()
+		logger.Debug("Failed to create authenticated client: %v", err)
+		// Only create a fallback client if we have an API key
+		// This prevents bypassing OAuth when it's available
+		if os.Getenv("ANTHROPIC_API_KEY") != "" {
+			logger.Debug("Falling back to API key authentication")
+			client = anthropic.NewClient()
+		} else {
+			logger.Debug("No authentication available - commands requiring API access will fail")
+			client = anthropic.Client{} // Empty client for commands that don't need API
+		}
+	} else {
+		// Log successful authentication method
+		authStatus := auth.GetAuthStatus()
+		logger.Info("Successfully authenticated using: %s", authStatus)
 	}
 
-	// Get current working directory and append to system prompt
-	workingDir, err := os.Getwd()
-	if err != nil {
-		workingDir = "unknown"
-	}
+	// Build system messages based on authentication status
+	systemMessages := agent.BuildSystemMessages()
 
-	// Append working directory info to system prompt
-	systemPromptWithContext := systemPrompt + "\n\n# Environment Context\nCurrent working directory: " + workingDir
-
-	// Set the system prompt for the TUI package
-	var systemPromptContent = systemPromptWithContext
-
-	// Initialize task agent with client and system prompt
-	tools.InitializeTaskAgent(&client, systemPromptContent)
+	// Initialize task agent with client and system messages
+	tools.InitializeTaskAgent(&client, systemMessages)
 
 	// Register all available tools
 	toolDefs := []tools.ToolDefinition{
@@ -86,14 +84,14 @@ func main() {
 
 	if len(args) > 0 && args[0] == "run" {
 		// Non-interactive mode: reapo run
-		runNonInteractive(client, toolDefs, args[1:], systemPromptContent)
+		runNonInteractive(client, toolDefs, args[1:], systemMessages)
 	} else {
 		// Interactive TUI mode: reapo
-		runTUI(client, toolDefs)
+		runTUI(client, toolDefs, systemMessages)
 	}
 }
 
-func runNonInteractive(client anthropic.Client, toolDefs []tools.ToolDefinition, args []string, systemPromptContent string) {
+func runNonInteractive(client anthropic.Client, toolDefs []tools.ToolDefinition, args []string, systemMessages []anthropic.TextBlockParam) {
 	var input string
 
 	if len(args) > 0 {
@@ -119,7 +117,7 @@ func runNonInteractive(client anthropic.Client, toolDefs []tools.ToolDefinition,
 	}
 
 	// Create agent for non-interactive mode
-	agentInstance := agent.NewAgent(&client, nil, toolDefs, systemPromptContent)
+	agentInstance := agent.NewAgent(&client, nil, toolDefs, systemMessages)
 
 	// Run the non-interactive session with timeout
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
@@ -139,6 +137,6 @@ func runNonInteractive(client anthropic.Client, toolDefs []tools.ToolDefinition,
 	fmt.Print(response)
 }
 
-func runTUI(client anthropic.Client, toolDefs []tools.ToolDefinition) {
-	tui.RunTUI(client, toolDefs, systemPrompt)
+func runTUI(client anthropic.Client, toolDefs []tools.ToolDefinition, systemMessages []anthropic.TextBlockParam) {
+	tui.RunTUI(client, toolDefs, systemMessages)
 }

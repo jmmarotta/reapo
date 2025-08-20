@@ -54,8 +54,49 @@ func NewSession() *Session {
 	}
 }
 
-// AddUserMessage adds a user message to both stores
-func (s *Session) AddUserMessage(text string, messageID string) {
+// AddUserAPIMessage adds a user message only to API messages (not UI)
+// Smart: appends to last message if it's already a user message
+func (s *Session) AddUserAPIMessage(text string) int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	
+	var apiMsgIndex int
+	
+	// Check if we should append to last message
+	if len(s.Messages) > 0 {
+		lastMsgIndex := len(s.Messages) - 1
+		lastMsg := &s.Messages[lastMsgIndex]
+		if lastMsg.Role == "user" {
+			// Append as additional text block to existing user message
+			lastMsg.Content = append(lastMsg.Content, anthropic.ContentBlockParamUnion{
+				OfText: &anthropic.TextBlockParam{
+					Type: "text",
+					Text: text,
+				},
+			})
+			apiMsgIndex = lastMsgIndex
+		} else {
+			// Create new user message (last message is not user)
+			s.Messages = append(s.Messages, anthropic.NewUserMessage(
+				anthropic.NewTextBlock(text),
+			))
+			apiMsgIndex = len(s.Messages) - 1
+		}
+	} else {
+		// No messages yet, create first user message
+		s.Messages = append(s.Messages, anthropic.NewUserMessage(
+			anthropic.NewTextBlock(text),
+		))
+		apiMsgIndex = 0
+	}
+	
+	s.UpdatedAt = time.Now()
+	s.updateTokenCount()
+	return apiMsgIndex
+}
+
+// AddUserUIMessage adds a user message only to UI messages
+func (s *Session) AddUserUIMessage(text string, messageID string, apiMsgIndex int) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	
@@ -71,17 +112,21 @@ func (s *Session) AddUserMessage(text string, messageID string) {
 	}
 	s.UIMessages = append(s.UIMessages, uiMsg)
 	
-	// Add to API messages
-	apiMsgIndex := len(s.Messages)
-	s.Messages = append(s.Messages, anthropic.NewUserMessage(
-		anthropic.NewTextBlock(text),
-	))
-	
-	// Track the relationship
-	s.MessageMap[messageID] = []int{apiMsgIndex}
-	
-	s.UpdatedAt = time.Now()
-	s.updateTokenCount()
+	// Track the relationship if API index provided
+	if apiMsgIndex >= 0 {
+		if s.MessageMap[messageID] == nil {
+			s.MessageMap[messageID] = []int{}
+		}
+		s.MessageMap[messageID] = append(s.MessageMap[messageID], apiMsgIndex)
+	}
+}
+
+// AddUserMessage adds a user message to both stores
+func (s *Session) AddUserMessage(text string, messageID string) {
+	// First add to API messages and get the index
+	apiIndex := s.AddUserAPIMessage(text)
+	// Then add to UI messages with the API index
+	s.AddUserUIMessage(text, messageID, apiIndex)
 }
 
 // AddAssistantTextResponse adds an assistant text response to both stores
@@ -418,6 +463,14 @@ func estimateMessageChars(msg anthropic.MessageParam) int {
 	// properly count all content blocks
 	// For now, return a rough estimate
 	return 100 // Placeholder
+}
+
+// HasAPIMessages checks if the session has any API messages
+func (s *Session) HasAPIMessages() bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	
+	return len(s.Messages) > 0
 }
 
 // generateSessionID generates a unique session ID

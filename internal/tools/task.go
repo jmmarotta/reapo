@@ -12,16 +12,16 @@ import (
 	"reapo/internal/schema"
 )
 
-// Global variables to store client and system prompt for task execution
+// Global variables to store client and system messages for task execution
 var (
-	taskClient       *anthropic.Client
-	taskSystemPrompt string
+	taskClient         *anthropic.Client
+	taskSystemMessages []anthropic.TextBlockParam
 )
 
-// InitializeTaskAgent sets up the global client and system prompt for task execution
-func InitializeTaskAgent(client *anthropic.Client, systemPrompt string) {
+// InitializeTaskAgent sets up the global client and system messages for task execution
+func InitializeTaskAgent(client *anthropic.Client, systemMessages []anthropic.TextBlockParam) {
 	taskClient = client
-	taskSystemPrompt = systemPrompt
+	taskSystemMessages = systemMessages
 }
 
 type TaskInput struct {
@@ -74,7 +74,7 @@ func Task(input json.RawMessage) (string, error) {
 		// Note: We don't include TaskDefinition to avoid recursion
 	}
 
-	taskAgent := agent.NewAgent(taskClient, nil, availableTools, taskSystemPrompt)
+	taskAgent := agent.NewAgent(taskClient, nil, availableTools, taskSystemMessages)
 
 	// Create context with timeout
 	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Second) // 5 minutes for complex tasks

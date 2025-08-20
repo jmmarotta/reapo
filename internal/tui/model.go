@@ -17,6 +17,14 @@ import (
 	"reapo/internal/tui/components/vimtextarea"
 )
 
+// FocusedWindow represents which window is currently focused
+type FocusedWindow int
+
+const (
+	FocusInput FocusedWindow = iota
+	FocusChat
+)
+
 // Model represents the Bubble Tea model for the TUI
 type Model struct {
 	session  *session.Session // Manages dual message storage
@@ -47,6 +55,17 @@ type Model struct {
 	leaderKey           string                       // The configured leader key
 	lastKeyWasLeader    bool                         // Track if last key was leader
 	lastKeyWasG         bool                         // Track if last key was 'g' for gg command
+	// Window focus and scrolling
+	focusedWindow         FocusedWindow // Which window is currently focused
+	chatScrollOffset      int           // Lines from bottom (0 = viewing latest)
+	chatTotalLines        int           // Total number of rendered chat lines
+	chatCursorLine        int           // Cursor position in chat viewport
+	awaitingWindowCommand bool          // Waiting for window navigation command after Ctrl-W
+	// Visual selection state for chat
+	chatVisualMode        bool // Whether visual mode is active in chat
+	chatVisualLine        bool // true for line mode (V), false for char mode (v)
+	chatSelectionStart    int  // Starting line of selection
+	chatSelectionEnd      int  // Ending line of selection
 }
 
 // AgentResponseMsg represents a message from the agent
@@ -143,8 +162,8 @@ type ShowStatuslineMsg struct {
 // ClearStatuslineMsg clears the statusline message
 type ClearStatuslineMsg struct{}
 
-// systemPromptContent will be set by the runner
-var systemPromptContent string
+// systemMessages will be set by the runner
+var systemMessages []anthropic.TextBlockParam
 
 // NewModel creates a new TUI model
 func NewModel(client anthropic.Client, toolDefs []tools.ToolDefinition) Model {
@@ -164,7 +183,7 @@ func NewModel(client anthropic.Client, toolDefs []tools.ToolDefinition) Model {
 	completionEngine := completion.NewCompletionEngine(workingDir)
 	ta.SetCompletionEngine(completionEngine)
 
-	chatAgent := agent.NewAgent(&client, nil, toolDefs, systemPromptContent)
+	chatAgent := agent.NewAgent(&client, nil, toolDefs, systemMessages)
 
 	// Initialize session
 	sess := session.NewSession()
@@ -174,27 +193,36 @@ func NewModel(client anthropic.Client, toolDefs []tools.ToolDefinition) Model {
 		session:              sess,
 		textarea:             ta,
 		agent:                chatAgent,
-		client:               client,
-		toolDefs:             toolDefs,
-		maxContextTokens:     config.GetContextTokens(),
-		currentModel:         config.GetModelName(),
-		spinners:             make(map[string]*components.SpinnerComponent),
-		helpModal:            components.NewHelpModal(),
-		statusModal:          components.NewStatusModal(),
-		statusline:           components.NewStatuslineComponent(0), // Width will be set on WindowSizeMsg
-		authModal:            components.NewAuthModal(),
-		leaderKey:            config.GetLeaderKey(),
-		conversationViewMode: false,
-		conversationView:     nil,
-		lastKeyWasLeader:     false,
-		lastKeyWasG:          false,
+		client:                client,
+		toolDefs:              toolDefs,
+		maxContextTokens:      config.GetContextTokens(),
+		currentModel:          config.GetModelName(),
+		spinners:              make(map[string]*components.SpinnerComponent),
+		helpModal:             components.NewHelpModal(),
+		statusModal:           components.NewStatusModal(),
+		statusline:            components.NewStatuslineComponent(0), // Width will be set on WindowSizeMsg
+		authModal:             components.NewAuthModal(),
+		leaderKey:             config.GetLeaderKey(),
+		conversationViewMode:  false,
+		conversationView:      nil,
+		lastKeyWasLeader:      false,
+		lastKeyWasG:           false,
+		focusedWindow:         FocusInput, // Start with input focused
+		chatScrollOffset:      0,           // Start at bottom of chat
+		chatTotalLines:        0,
+		chatCursorLine:        0,
+		awaitingWindowCommand: false,
+		chatVisualMode:        false,
+		chatVisualLine:        false,
+		chatSelectionStart:    0,
+		chatSelectionEnd:      0,
 	}
 
 	return model
 }
 
 // Init initializes the TUI model
-func (m Model) Init() tea.Cmd {
+func (m *Model) Init() tea.Cmd {
 	return m.textarea.Init()
 }
 
@@ -206,4 +234,46 @@ func generateMessageID() string {
 		return fmt.Sprintf("msg_fallback_%d", time.Now().UnixNano())
 	}
 	return id.String()
+}
+
+// calculateChatHeight calculates the available height for the chat component
+// This is a simplified version that estimates based on known component heights
+func (m *Model) calculateChatHeight() int {
+	// Estimate component heights
+	textareaHeight := m.textarea.Height()
+	inputBorderHeight := 2 // Border adds 2 lines
+	inputMargins := 4      // MarginTop(1) + MarginBottom(3) = 4 lines
+	footerHeight := 1      // Footer is 1 line
+	statuslineHeight := 1  // Statusline is 1 line
+	
+	// No fixed spacing needed - lipgloss.JoinVertical handles layout
+	fixedSpacing := 0
+	
+	// Processing indicator adds 1 line when active  
+	processingHeight := 0
+	if m.processing {
+		processingHeight = 1
+	}
+	
+	// Completion height when active
+	completionHeight := 0
+	if completionState := m.textarea.CompletionState(); completionState.Active {
+		// Estimate completion height (usually 5-10 lines)
+		completionHeight = min(10, len(completionState.Items))
+	}
+	
+	// Total height of everything except chat
+	nonChatHeight := textareaHeight + inputBorderHeight + inputMargins + 
+		footerHeight + statuslineHeight + fixedSpacing + 
+		processingHeight + completionHeight
+	
+	// Chat fills the remaining space
+	chatHeight := m.viewport.height - nonChatHeight
+	
+	// Ensure we have at least 1 line for chat
+	if chatHeight < 1 {
+		chatHeight = 1
+	}
+	
+	return chatHeight
 }

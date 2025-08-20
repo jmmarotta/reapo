@@ -2,15 +2,21 @@ package agent
 
 import (
 	"context"
+	_ "embed"
 	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
 	"github.com/anthropics/anthropic-sdk-go"
+	"reapo/internal/auth"
 	"reapo/internal/config"
 	"reapo/internal/logger"
 )
+
+//go:embed system_prompt.txt
+var systemPrompt string
 
 // ToolUseInfo represents a tool use request from Claude
 type ToolUseInfo struct {
@@ -38,18 +44,45 @@ type ToolCallback func(event string, toolName, toolID, data string)
 
 // Agent represents an AI agent that can interact with tools
 type Agent struct {
-	client       *anthropic.Client
-	tools        []ToolDefinition
-	systemPrompt string
-	toolCallback ToolCallback
+	client         *anthropic.Client
+	tools          []ToolDefinition
+	systemMessages []anthropic.TextBlockParam
+	toolCallback   ToolCallback
+}
+
+// BuildSystemMessages creates the appropriate system messages based on authentication status
+func BuildSystemMessages() []anthropic.TextBlockParam {
+	// Get current working directory and append to system prompt
+	workingDir, err := os.Getwd()
+	if err != nil {
+		workingDir = "unknown"
+	}
+
+	// Append working directory info to system prompt
+	systemPromptWithContext := systemPrompt + "\n\n# Environment Context\nCurrent working directory: " + workingDir
+
+	// Check authentication status
+	authStatus := auth.GetAuthStatus()
+	if authStatus == "Claude Max (OAuth)" {
+		// For Claude Code Max, return two system messages
+		return []anthropic.TextBlockParam{
+			{Type: "text", Text: "You are Claude Code, Anthropic's official CLI for Claude."},
+			{Type: "text", Text: systemPromptWithContext},
+		}
+	}
+
+	// For API key authentication, return single system message
+	return []anthropic.TextBlockParam{
+		{Type: "text", Text: systemPromptWithContext},
+	}
 }
 
 // NewAgent creates a new agent
-func NewAgent(client *anthropic.Client, getUserMessage func() (string, bool), toolDefs []ToolDefinition, systemPrompt string) *Agent {
+func NewAgent(client *anthropic.Client, getUserMessage func() (string, bool), toolDefs []ToolDefinition, systemMessages []anthropic.TextBlockParam) *Agent {
 	return &Agent{
-		client:       client,
-		tools:        toolDefs,
-		systemPrompt: systemPrompt,
+		client:         client,
+		tools:          toolDefs,
+		systemMessages: systemMessages,
 	}
 }
 
@@ -155,7 +188,7 @@ func (a *Agent) RunInference(ctx context.Context, conversation []anthropic.Messa
 		MaxTokens: int64(config.GetMaxTokens()),
 		Messages:  conversation,
 		Tools:     anthropicTools,
-		System:    []anthropic.TextBlockParam{{Type: "text", Text: a.systemPrompt}},
+		System:    a.systemMessages,
 	})
 
 	// Accumulate the message from stream

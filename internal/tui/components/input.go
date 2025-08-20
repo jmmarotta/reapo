@@ -21,10 +21,13 @@ func NewInputComponent(textarea vimtextarea.Model, width int) *InputComponent {
 
 // Render renders the input area with border and styling
 func (i *InputComponent) Render() string {
+	// Use consistent border color regardless of focus
 	return lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(lipgloss.Color("240")).
 		Width(i.width-2).
 		Padding(0, 1).
+		MarginTop(1).
+		MarginBottom(3).
 		Render(i.textarea.View())
 }

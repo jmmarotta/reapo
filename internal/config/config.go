@@ -11,8 +11,9 @@ import (
 
 // ConfigFile represents the JSON configuration file structure
 type ConfigFile struct {
-	Model     string `json:"model,omitempty"`
-	LeaderKey string `json:"leader_key,omitempty"`
+	Model       string `json:"model,omitempty"`
+	LeaderKey   string `json:"leader_key,omitempty"`
+	LogRequests bool   `json:"log_requests,omitempty"`
 }
 
 // Config holds the application configuration
@@ -22,6 +23,7 @@ type Config struct {
 	MaxTokens     int
 	ContextTokens int
 	LeaderKey     string
+	LogRequests   bool
 }
 
 // Global config instance
@@ -60,10 +62,11 @@ func Init() {
 		MaxTokens:     64000,
 		ContextTokens: 1000000,
 		LeaderKey:     "<space>",
+		LogRequests:   false,
 	}
 
 	// Try to load from config file
-	modelName, leaderKey := loadConfigFile()
+	modelName, leaderKey, logRequests := loadConfigFile()
 
 	// Check environment variable if no config file setting
 	if modelName == "" {
@@ -74,6 +77,9 @@ func Init() {
 	if leaderKey != "" {
 		AppConfig.LeaderKey = leaderKey
 	}
+
+	// Apply log requests setting
+	AppConfig.LogRequests = logRequests
 
 	// If a model is specified, update the config
 	if modelName != "" {
@@ -93,24 +99,24 @@ func Init() {
 }
 
 // loadConfigFile loads the configuration from ~/.config/reapo/config.json
-func loadConfigFile() (string, string) {
+func loadConfigFile() (string, string, bool) {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
-		return "", ""
+		return "", "", false
 	}
 
 	configPath := filepath.Join(homeDir, ".config", "reapo", "config.json")
 	data, err := os.ReadFile(configPath)
 	if err != nil {
-		return "", ""
+		return "", "", false
 	}
 
 	var configFile ConfigFile
 	if err := json.Unmarshal(data, &configFile); err != nil {
-		return "", ""
+		return "", "", false
 	}
 
-	return configFile.Model, configFile.LeaderKey
+	return configFile.Model, configFile.LeaderKey, configFile.LogRequests
 }
 
 // GetModel returns the configured model
@@ -151,6 +157,14 @@ func GetLeaderKey() string {
 		Init()
 	}
 	return parseLeaderKey(AppConfig.LeaderKey)
+}
+
+// GetLogRequests returns whether request logging is enabled
+func GetLogRequests() bool {
+	if AppConfig == nil {
+		Init()
+	}
+	return AppConfig.LogRequests
 }
 
 // parseLeaderKey converts special key representations to actual characters

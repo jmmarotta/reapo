@@ -10,24 +10,15 @@ import (
 )
 
 // RunTUI starts the TUI interface
-func RunTUI(client anthropic.Client, toolDefs []tools.ToolDefinition, systemPrompt string) {
-	// Get current working directory and append to system prompt
-	workingDir, err := os.Getwd()
-	if err != nil {
-		workingDir = "unknown"
-	}
-
-	// Append working directory info to system prompt
-	systemPromptWithContext := systemPrompt + "\n\n# Environment Context\nCurrent working directory: " + workingDir
-
-	// Set the system prompt for the TUI package
-	systemPromptContent = systemPromptWithContext
+func RunTUI(client anthropic.Client, toolDefs []tools.ToolDefinition, sysMessages []anthropic.TextBlockParam) {
+	// Set the system messages for the TUI package
+	systemMessages = sysMessages
 
 	// Create the TUI model
 	m := NewModel(client, toolDefs)
 
-	// Run the Bubble Tea program
-	p := tea.NewProgram(m, tea.WithAltScreen())
+	// Run the Bubble Tea program with mouse support
+	p := tea.NewProgram(&m, tea.WithAltScreen(), tea.WithMouseCellMotion())
 	if _, err := p.Run(); err != nil {
 		log.Printf("Error: %s\n", err.Error())
 		os.Exit(1)

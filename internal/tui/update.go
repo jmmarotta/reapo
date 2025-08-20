@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/anthropics/anthropic-sdk-go"
+	"github.com/atotto/clipboard"
 	tea "github.com/charmbracelet/bubbletea"
 	"reapo/internal/agent"
 	"reapo/internal/auth"
@@ -26,7 +27,7 @@ import (
 var summaryPrompt string
 
 // Update handles messages and updates the model
-func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	var cmds []tea.Cmd
 
@@ -60,6 +61,39 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.statusModal = &statusModal
 		}
 		return m, cmd
+
+	case tea.MouseMsg:
+		// Handle mouse events
+		// Calculate chat height for scroll boundaries
+		chatHeight := m.calculateChatHeight()
+		
+		switch msg.Type {
+		case tea.MouseWheelUp:
+			maxScroll := max(0, m.chatTotalLines-chatHeight)
+			if m.chatScrollOffset < maxScroll {
+				m.chatScrollOffset = min(maxScroll, m.chatScrollOffset+3)
+			}
+		case tea.MouseWheelDown:
+			if m.chatScrollOffset > 0 {
+				m.chatScrollOffset = max(0, m.chatScrollOffset-3)
+			}
+		case tea.MouseLeft:
+			// Detect click position to focus chat or input
+			// chatHeight already calculated above
+			
+			if msg.Y < chatHeight {
+				// Clicked in chat area
+				m.focusedWindow = FocusChat
+				m.textarea.Blur()
+				// Set cursor to click position
+				m.chatCursorLine = min(msg.Y, chatHeight-1)
+			} else {
+				// Clicked in input area
+				m.focusedWindow = FocusInput
+				m.textarea.Focus()
+			}
+		}
+		return m, nil
 
 	case tea.KeyMsg:
 		// Handle conversation view mode first
@@ -208,6 +242,274 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 
+		// Handle Ctrl-W window navigation
+		if m.awaitingWindowCommand {
+			m.awaitingWindowCommand = false
+			switch msg.String() {
+			case "k", "K": // Move to chat (up)
+				m.focusedWindow = FocusChat
+				m.textarea.Blur()
+				m.chatScrollOffset = 0 // Reset to bottom when switching to chat
+				// Calculate chat height to set cursor at bottom
+				chatHeight := m.calculateChatHeight()
+				// When there are more lines than can fit, account for scroll indicator
+				if m.chatTotalLines > chatHeight {
+					// Top scroll indicator will show, reducing visible lines by 1
+					m.chatCursorLine = chatHeight - 2
+				} else if m.chatTotalLines > 0 {
+					// All lines fit, no scroll indicator
+					m.chatCursorLine = m.chatTotalLines - 1
+				} else {
+					m.chatCursorLine = 0
+				}
+				return m, nil
+			case "j", "J": // Move to input (down)
+				m.focusedWindow = FocusInput
+				m.textarea.Focus()
+				return m, nil
+			case "w", "W": // Cycle windows
+				if m.focusedWindow == FocusInput {
+					m.focusedWindow = FocusChat
+					m.textarea.Blur()
+					m.chatScrollOffset = 0
+					// Calculate chat height to set cursor at bottom
+					chatHeight := m.calculateChatHeight()
+					// When there are more lines than can fit, account for scroll indicator
+					if m.chatTotalLines > chatHeight {
+						// Top scroll indicator will show, reducing visible lines by 1
+						m.chatCursorLine = chatHeight - 2
+					} else if m.chatTotalLines > 0 {
+						// All lines fit, no scroll indicator
+						m.chatCursorLine = m.chatTotalLines - 1
+					} else {
+						m.chatCursorLine = 0
+					}
+				} else {
+					m.focusedWindow = FocusInput
+					m.textarea.Focus()
+				}
+				return m, nil
+			case "ctrl+w": // Double Ctrl-W also cycles
+				if m.focusedWindow == FocusInput {
+					m.focusedWindow = FocusChat
+					m.textarea.Blur()
+					m.chatScrollOffset = 0
+					// Calculate chat height to set cursor at bottom
+					chatHeight := m.calculateChatHeight()
+					// When there are more lines than can fit, account for scroll indicator
+					if m.chatTotalLines > chatHeight {
+						// Top scroll indicator will show, reducing visible lines by 1
+						m.chatCursorLine = chatHeight - 2
+					} else if m.chatTotalLines > 0 {
+						// All lines fit, no scroll indicator
+						m.chatCursorLine = m.chatTotalLines - 1
+					} else {
+						m.chatCursorLine = 0
+					}
+				} else {
+					m.focusedWindow = FocusInput
+					m.textarea.Focus()
+				}
+				return m, nil
+			default:
+				// Invalid window command, continue processing
+			}
+		}
+
+		// Check for Ctrl-W to start window navigation
+		if msg.String() == "ctrl+w" {
+			m.awaitingWindowCommand = true
+			return m, nil
+		}
+
+		// Handle vim navigation when chat is focused
+		if m.focusedWindow == FocusChat {
+			// Calculate viewport height for cursor movement
+			chatHeight := m.calculateChatHeight()
+			
+			// Calculate actual viewport bounds
+			// When scrollOffset = 0, we're at the bottom showing latest messages
+			// startIdx is the first visible line index in the full chat
+			var startIdx, endIdx int
+			if m.chatTotalLines <= chatHeight {
+				// All lines fit
+				startIdx = 0
+				endIdx = m.chatTotalLines
+			} else {
+				// Need scrolling
+				endIdx = m.chatTotalLines - m.chatScrollOffset
+				startIdx = max(0, endIdx - chatHeight)
+			}
+			
+			visibleLines := endIdx - startIdx
+			
+			// Account for scroll indicator taking up a line when shown
+			if startIdx > 0 && visibleLines > 0 {
+				// Top scroll indicator is shown, reduces available lines by 1
+				visibleLines--
+			}
+			
+			maxCursorLine := max(0, visibleLines - 1)
+			
+			// Handle vim keys for chat navigation
+			switch msg.String() {
+			case "j": // Move cursor down (towards newer messages)
+				if m.chatCursorLine < maxCursorLine {
+					// Move cursor down within viewport
+					m.chatCursorLine++
+				} else if m.chatScrollOffset > 0 {
+					// At bottom of viewport, scroll to show newer messages
+					m.chatScrollOffset-- // Decrease offset to show newer messages
+					// Keep cursor at bottom
+				}
+				// Update selection end if in visual mode
+				if m.chatVisualMode {
+					actualLine := startIdx + m.chatCursorLine
+					m.chatSelectionEnd = actualLine
+				}
+				return m, nil
+			case "k": // Move cursor up (towards older messages)
+				if m.chatCursorLine > 0 {
+					// Move cursor up within viewport
+					m.chatCursorLine--
+				} else if m.chatScrollOffset < max(0, m.chatTotalLines-chatHeight) {
+					// At top of viewport, scroll to show older messages
+					m.chatScrollOffset++ // Increase offset to show older messages
+					// Keep cursor at top
+				}
+				// Update selection end if in visual mode
+				if m.chatVisualMode {
+					actualLine := startIdx + m.chatCursorLine
+					m.chatSelectionEnd = actualLine
+				}
+				return m, nil
+			case "G": // Go to bottom (newest messages)
+				m.chatScrollOffset = 0
+				// Recalculate visible lines for bottom position
+				var bottomVisibleLines int
+				if m.chatTotalLines <= chatHeight {
+					bottomVisibleLines = m.chatTotalLines
+				} else {
+					bottomVisibleLines = chatHeight
+				}
+				// Set cursor to last visible line
+				if bottomVisibleLines > 0 {
+					m.chatCursorLine = bottomVisibleLines - 1
+				} else {
+					m.chatCursorLine = 0
+				}
+				return m, nil
+			case "g":
+				if m.lastKeyWasG {
+					// gg - go to top (oldest messages)
+					m.chatScrollOffset = max(0, m.chatTotalLines-chatHeight)
+					m.chatCursorLine = 0
+					m.lastKeyWasG = false
+				} else {
+					m.lastKeyWasG = true
+				}
+				return m, nil
+			case "H": // Move to top of viewport
+				m.chatCursorLine = 0
+				return m, nil
+			case "M": // Move to middle of viewport
+				m.chatCursorLine = maxCursorLine / 2
+				return m, nil
+			case "L": // Move to bottom of viewport
+				m.chatCursorLine = maxCursorLine
+				return m, nil
+			case "ctrl+d": // Half page down (towards newer messages)
+				scrollAmount := chatHeight / 2
+				m.chatScrollOffset = max(0, m.chatScrollOffset-scrollAmount)
+				// Move cursor down with scroll
+				m.chatCursorLine = min(maxCursorLine, m.chatCursorLine+scrollAmount)
+				return m, nil
+			case "ctrl+u": // Half page up (towards older messages)
+				scrollAmount := chatHeight / 2
+				maxScroll := max(0, m.chatTotalLines-chatHeight)
+				m.chatScrollOffset = min(maxScroll, m.chatScrollOffset+scrollAmount)
+				// Move cursor up with scroll
+				m.chatCursorLine = max(0, m.chatCursorLine-scrollAmount)
+				return m, nil
+			case "ctrl+f", "pgdown": // Page down (towards newer messages)
+				m.chatScrollOffset = max(0, m.chatScrollOffset-chatHeight)
+				return m, nil
+			case "ctrl+b", "pgup": // Page up (towards older messages)
+				maxScroll := max(0, m.chatTotalLines-chatHeight)
+				m.chatScrollOffset = min(maxScroll, m.chatScrollOffset+chatHeight)
+				return m, nil
+			case "v": // Character visual mode
+				if !m.chatVisualMode {
+					m.chatVisualMode = true
+					m.chatVisualLine = false
+					// Calculate actual line position in full chat
+					actualLine := startIdx + m.chatCursorLine
+					m.chatSelectionStart = actualLine
+					m.chatSelectionEnd = actualLine
+				} else {
+					// Exit visual mode
+					m.chatVisualMode = false
+				}
+				return m, nil
+			case "V": // Line visual mode
+				if !m.chatVisualMode {
+					m.chatVisualMode = true
+					m.chatVisualLine = true
+					// Calculate actual line position in full chat
+					actualLine := startIdx + m.chatCursorLine
+					m.chatSelectionStart = actualLine
+					m.chatSelectionEnd = actualLine
+				} else {
+					// Exit visual mode
+					m.chatVisualMode = false
+				}
+				return m, nil
+			case "y": // Yank (copy) selected text
+				if m.chatVisualMode {
+					// Create a temporary chat component to get selected text
+					chatComponent := components.NewChatComponentWithSelection(
+						m.session.GetUIMessages(),
+						chatHeight,
+						m.viewport.width,
+						m.chatScrollOffset,
+						true,
+						m.chatCursorLine,
+						m.chatVisualMode,
+						m.chatVisualLine,
+						m.chatSelectionStart,
+						m.chatSelectionEnd,
+					)
+					selectedText := chatComponent.GetSelectedText()
+					
+					// Copy to clipboard
+					if selectedText != "" {
+						clipboard.WriteAll(selectedText)
+						// Success feedback will be shown via statusline or could be omitted
+					}
+					
+					// Exit visual mode
+					m.chatVisualMode = false
+				}
+				return m, nil
+			case "i", "esc": // Return focus to input or exit visual mode
+				if m.chatVisualMode {
+					m.chatVisualMode = false
+					return m, nil
+				}
+				m.focusedWindow = FocusInput
+				m.textarea.Focus()
+				return m, nil
+			case "ctrl+c": // Still allow quit
+				return m, tea.Quit
+			}
+			// Reset lastKeyWasG if it's not 'g'
+			if msg.String() != "g" {
+				m.lastKeyWasG = false
+			}
+			// Don't process other keys when chat is focused
+			return m, nil
+		}
+
 		// Handle key events before passing to textarea
 		switch {
 		case msg.String() == "ctrl+c":
@@ -228,6 +530,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.textarea.SetValue("")
 
 				m.processing = true
+				m.chatScrollOffset = 0 // Auto-scroll to bottom when sending message
 				return m, m.processMessage(userMessage)
 			}
 			return m, nil
@@ -238,6 +541,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.textarea.SetValue("")
 
 				m.processing = true
+				m.chatScrollOffset = 0 // Auto-scroll to bottom when sending message
 				return m, m.processMessage(userMessage)
 			}
 			return m, nil
@@ -252,12 +556,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		// Update context tokens when adding completed messages
 		if msg.Message.Status == components.MessageCompleted {
-
+			// Auto-scroll to bottom when new message completes (if we were already at bottom)
+			if m.chatScrollOffset == 0 {
+				m.chatScrollOffset = 0 // Stay at bottom
+			}
+			
 			// Check if we need auto-compaction
 			if cmd := m.checkAutoCompaction(); cmd != nil {
 				return m, cmd
 			}
 		}
+		// Total lines count is now updated in View()
 		return m, nil
 
 	case MessageUpdateMsg:
@@ -305,6 +614,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.processingText = ""
 			m.processingSpinner = nil
 			// Token count is now managed by session
+			
+			// Total lines count is now updated in View()
+			
+			// Auto-scroll to bottom when message completes (if we were at bottom)
+			if m.chatScrollOffset == 0 {
+				m.chatScrollOffset = 0 // Stay at bottom  
+			}
 
 			// Check if we need auto-compaction
 			if cmd := m.checkAutoCompaction(); cmd != nil {
@@ -358,18 +674,27 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case ProcessMessageSequenceMsg:
-		// Add user message with original content for TUI display
-		userMsg := components.Message{
-			ID:        msg.UserMessageID,
-			Role:      "user",
-			Content:   msg.UserMessage, // Original message for display
-			Type:      components.MessageTypeText,
-			Status:    components.MessageCompleted,
-			Timestamp: time.Now(),
-			UpdatedAt: time.Now(),
+		// Check if this is the first message and if CLAUDE.md exists
+		isFirstMessage := !m.session.HasAPIMessages()
+		
+		if isFirstMessage {
+			if claudeMdContent := m.loadClaudeMd(); claudeMdContent != "" {
+				// Add CLAUDE.md only to API messages (not shown in UI)
+				m.session.AddUserAPIMessage(claudeMdContent)
+			}
 		}
-		// Add user message to session properly
-		m.session.AddUserMessage(userMsg.Content, userMsg.ID)
+		
+		// Add user message to both UI and API
+		// If CLAUDE.md was added above, this will append to the same API message
+		m.session.AddUserMessage(msg.UserMessage, msg.UserMessageID)
+		
+		// If this was the first message, also add the todo reminder
+		if isFirstMessage {
+			todoReminder := `<system-reminder>
+This is a reminder that your todo list is currently empty. DO NOT mention this to the user explicitly because they are already aware. If you are working on tasks that would benefit from a todo list please use the TodoWrite tool to create one. If not, please feel free to ignore. Again do not mention this message to the user.
+</system-reminder>`
+			m.session.AddUserAPIMessage(todoReminder)
+		}
 
 		// Token count is now managed by session
 
@@ -535,6 +860,30 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		summaryMessageID := generateMessageID()
 		newSession := session.NewSessionFromCompaction(m.session, msg.Summary, summaryMessageID)
 		
+		// Inject CLAUDE.md into the new session if it exists
+		// We'll prepend it to the summary message so it becomes the first text block
+		if claudeMdContent := m.loadClaudeMd(); claudeMdContent != "" {
+			if len(newSession.Messages) > 0 {
+				// The summary is already added as the first message
+				// We need to prepend CLAUDE.md as the first text block of that message
+				firstMsg := &newSession.Messages[0]
+				if firstMsg.Role == "user" {
+					// Prepend CLAUDE.md as the first text block
+					newContent := []anthropic.ContentBlockParamUnion{
+						{
+							OfText: &anthropic.TextBlockParam{
+								Type: "text",
+								Text: claudeMdContent,
+							},
+						},
+					}
+					// Add existing content blocks after CLAUDE.md
+					newContent = append(newContent, firstMsg.Content...)
+					firstMsg.Content = newContent
+				}
+			}
+		}
+		
 		// Replace the old session with the new one
 		m.session = newSession
 
@@ -682,13 +1031,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.authModal.Hide()
 
 		if msg.Success {
+			// Always rebuild system messages when auth changes (login or logout)
+			newSystemMessages := agent.BuildSystemMessages()
+			systemMessages = newSystemMessages
+			
 			// Reinitialize client
 			newClient, err := auth.NewClient()
 			if err != nil {
 				logger.Debug("Failed to reinitialize client: %v", err)
+				// Even if client creation fails, update the agent with new system messages
+				// This ensures logout removes the Claude Code identity message
+				m.agent = agent.NewAgent(&m.client, nil, m.toolDefs, systemMessages)
 			} else {
 				m.client = newClient
-				m.agent = agent.NewAgent(&m.client, nil, m.toolDefs, systemPromptContent)
+				m.agent = agent.NewAgent(&m.client, nil, m.toolDefs, systemMessages)
 			}
 			// Show success in statusline
 			return m, func() tea.Msg {
@@ -1489,6 +1845,49 @@ func formatToolArguments(toolName string, input json.RawMessage) string {
 	return "..."
 }
 
+// loadClaudeMd loads the CLAUDE.md file if it exists in the working directory
+func (m Model) loadClaudeMd() string {
+	// Get working directory
+	workingDir, err := os.Getwd()
+	if err != nil {
+		logger.Debug("Failed to get working directory: %v", err)
+		return ""
+	}
+	
+	// Check if CLAUDE.md exists
+	claudeMdPath := filepath.Join(workingDir, "CLAUDE.md")
+	content, err := os.ReadFile(claudeMdPath)
+	if err != nil {
+		// File doesn't exist or can't be read - this is OK
+		if !os.IsNotExist(err) {
+			logger.Debug("Failed to read CLAUDE.md: %v", err)
+		}
+		return ""
+	}
+	
+	// Format the content with the wrapper
+	formattedContent := fmt.Sprintf(`<system-reminder>
+As you answer the user's questions, you can use the following context:
+# claudeMd
+Codebase and user instructions are shown below. Be sure to adhere to these instructions. IMPORTANT: These instructions OVERRIDE any default behavior and you MUST follow them exactly as written.
+
+Contents of %s (project instructions, checked into the codebase):
+
+%s
+# important-instruction-reminders
+Do what has been asked; nothing more, nothing less.
+NEVER create files unless they're absolutely necessary for achieving your goal.
+ALWAYS prefer editing an existing file to creating a new one.
+NEVER proactively create documentation files (*.md) or README files. Only create documentation files if explicitly requested by the User.
+
+      
+      IMPORTANT: this context may or may not be relevant to your tasks. You should not respond to this context unless it is highly relevant to your task.
+</system-reminder>`, claudeMdPath, string(content))
+	
+	logger.Debug("Loaded CLAUDE.md content (%d bytes)", len(content))
+	return formattedContent
+}
+
 // openExternalEditor opens the user's preferred editor for quick access
 func (m Model) openExternalEditor() tea.Cmd {
 	return func() tea.Msg {
@@ -1639,3 +2038,4 @@ func (m Model) countConversationTokens() int {
 	// Token counting is now managed by the session
 	return m.session.GetTokenCount()
 }
+

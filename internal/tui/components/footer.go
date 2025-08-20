@@ -17,6 +17,9 @@ type FooterComponent struct {
 	contextTokens    int
 	maxContextTokens int
 	modelName        string
+	focusedWindow    string // "chat" or "input"
+	chatCursorLine   int    // Current cursor line in chat
+	chatTotalLines   int    // Total lines in chat
 }
 
 // NewFooterComponent creates a new footer component
@@ -27,15 +30,41 @@ func NewFooterComponent(mode vimtextarea.Mode, width int) *FooterComponent {
 		contextTokens:    0,
 		maxContextTokens: config.GetContextTokens(),
 		modelName:        config.GetModelName(),
+		focusedWindow:    "input",
 	}
+}
+
+// SetFocusedWindow updates which window is focused
+func (f *FooterComponent) SetFocusedWindow(window string) {
+	f.focusedWindow = window
+}
+
+// SetChatCursorInfo updates the chat cursor position information
+func (f *FooterComponent) SetChatCursorInfo(cursorLine, totalLines int) {
+	f.chatCursorLine = cursorLine
+	f.chatTotalLines = totalLines
 }
 
 // Render renders the complete footer with mode indicator and status bar
 func (f *FooterComponent) Render() string {
-	// Create mode indicator
-	modeIndicator := NewModeIndicatorComponent(f.mode)
-	modeIndicatorRendered := modeIndicator.Render()
-	modeIndicatorWidth := modeIndicator.Width()
+	// Create mode indicator based on focused window
+	var modeIndicator *ModeIndicatorComponent
+	var modeIndicatorRendered string
+	var modeIndicatorWidth int
+	
+	if f.focusedWindow == "chat" {
+		// Show CHAT mode when chat is focused
+		chatModeStyle := lipgloss.NewStyle().
+			Background(lipgloss.Color("6")). // Cyan for chat
+			Foreground(lipgloss.Color("0"))
+		modeIndicatorRendered = chatModeStyle.Render("  CHAT  ")
+		modeIndicatorWidth = 8
+	} else {
+		// Show vim mode when input is focused
+		modeIndicator = NewModeIndicatorComponent(f.mode)
+		modeIndicatorRendered = modeIndicator.Render()
+		modeIndicatorWidth = modeIndicator.Width()
+	}
 
 	// Calculate remaining width for main footer content
 	remainingWidth := f.width - modeIndicatorWidth
@@ -66,9 +95,16 @@ func (f *FooterComponent) Render() string {
 
 	leftText := "reapo"
 	rightText := f.modelName
+	
+	// Add cursor position if in chat mode
+	if f.focusedWindow == "chat" && f.chatTotalLines > 0 {
+		// Show actual line position in the chat (1-based for user)
+		cursorPosition := fmt.Sprintf("Line %d/%d", f.chatCursorLine+1, f.chatTotalLines)
+		rightText = cursorPosition + " | " + rightText
+	}
 
 	// Build the sections with proper spacing
-	// Layout: reapo | pwd | context | model
+	// Layout: reapo | pwd | context | [cursor pos |] model
 	sections := []string{leftText, pwd, contextText, rightText}
 
 	// Calculate spacing between sections
